@@ -1,0 +1,20 @@
+{{- if and .Values.prometheus.rules.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "paperless-ngx.fullname" . }}
+  labels:
+    {{- include "paperless-ngx.labels" . | nindent 4 }}
+    {{- with .Values.prometheus.rules.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ template "paperless-ngx.fullname" . }}-Additional
+      rules: []
+    {{- with .Values.prometheus.rules.additionalRules }}
+    - name: {{ template "paperless-ngx.fullname" $ }}-Additional
+      rules:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}

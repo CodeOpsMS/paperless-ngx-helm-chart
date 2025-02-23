@@ -1,0 +1,129 @@
+---
+{{- $fullname := include "paperless-ngx.fullname" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "paperless-ngx.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "paperless-ngx.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        "checksum/config": {{ toYaml .Values.config | sha256sum }}
+        "checksum/env": {{ toYaml .Values.env | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "paperless-ngx.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "paperless-ngx.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.image }}
+          image: "{{ coalesce $.Values.global.image.registry .registry }}/{{ .repository }}:{{ .tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ coalesce $.Values.global.image.pullPolicy .pullPolicy }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            {{- if .Values.env.PAPERLESS_ENABLE_FLOWER }}
+            - name: metrics
+              containerPort: 5555
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ $fullname }}
+          {{- with .Values.redis.auth }}
+          {{- if and .enabled .existingSecret }}
+          env:
+            - name: "REDIS_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .existingSecret }}
+                  key: {{ .existingSecretPasswordKey }}
+          {{- end }}
+          {{- end }}{{/* end-with redis.auth */}}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: /usr/src/paperless/data
+              name: storage
+              subPath: data
+            - mountPath: /usr/src/paperless/media
+              name: storage
+              subPath: media
+            - mountPath: /usr/src/paperless/consume
+              name: storage
+              subPath: consume
+            - mountPath: /usr/src/paperless/export
+              name: storage
+              subPath: export
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: storage
+          {{- with .Values.persistence }}
+          {{- with .hostPath }}
+          hostPath:
+            type: Directory
+            path: {{ . | quote }}
+          {{- else }}
+          {{- if .enabled }}
+          persistentVolumeClaim:
+            claimName: {{ coalesce .existingClaim $fullname }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}{{/* end-if persistence.enabled */}}
+          {{- end }}{{/* end-else-with hostPath */}}
+          {{- end }}{{/* end-with persistence */}}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,73 @@
+{{- with .Values.networkPolicy }}
+{{- if .enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "paperless-ngx.fullname" $ }}
+  labels:
+    {{- include "paperless-ngx.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "paperless-ngx.selectorLabels" $ | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if .egress.enabled }}
+    - Egress
+    {{- end }}
+  ingress:
+    {{- with .ingress.http }}
+    - ports:
+        - port: 8000
+          protocol: TCP
+      from:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}{{/* end-with .ingress.http */}}
+
+    {{- with .ingress.metrics }}
+    - ports:
+        - port: 5555
+          protocol: TCP
+      from:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}{{/* end-with .ingress.metrics */}}
+
+  {{- with .egress }}
+  {{- if .enabled }}
+  egress:
+    {{- with .dns }}
+    - ports:
+        - port: 53
+          protocol: UDP
+      to:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .database }}
+    {{- toYaml . | nindent 4 }}
+    {{- else }}
+    - ports:
+        - port: 5432
+          protocol: TCP
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/name: postgresql
+    - ports:
+        - port: 6379
+          protocol: TCP
+      to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/name: redis
+              app.kubernetes.io/component: master
+    {{- end }}
+    {{- with .extra }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}{{/* end-if egress.enabled */}}
+  {{- end }}{{/* end-with .egress */}}
+{{- end }}
+{{- end }}
