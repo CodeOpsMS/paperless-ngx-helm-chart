@@ -11,13 +11,17 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# -- replicas
 replicaCount: 1
 
 image:
+  # -- image registry (could be overwritten by global.image.registry)
   registry: "ghcr.io"
+  # -- image repository
   repository: paperless-ngx/paperless-ngx
-  # -- This sets the pull policy for images.
+  # -- This sets the pull policy for images. (could be overwritten by global.image.pullPolicy)
   pullPolicy: IfNotPresent
+  # -- image tag - Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
 

@@ -7,7 +7,7 @@ description: "A document management system that transforms your physical documen
 
 # paperless-ngx
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.14.7](https://img.shields.io/badge/AppVersion-2.14.7-informational?style=flat-square)
+![Version: 0.1.1](https://img.shields.io/badge/Version-0.1.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.14.7](https://img.shields.io/badge/AppVersion-2.14.7-informational?style=flat-square)
 
 A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
 
@@ -97,10 +97,10 @@ helm uninstall paperless-ngx-release
 | grafana.dashboards.annotations | object | `{}` |  |
 | grafana.dashboards.enabled | bool | `false` |  |
 | grafana.dashboards.labels.grafana_dashboard | string | `"1"` |  |
-| image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. |
-| image.registry | string | `"ghcr.io"` |  |
-| image.repository | string | `"paperless-ngx/paperless-ngx"` |  |
-| image.tag | string | `""` |  |
+| image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. (could be overwritten by global.image.pullPolicy) |
+| image.registry | string | `"ghcr.io"` | image registry (could be overwritten by global.image.registry) |
+| image.repository | string | `"paperless-ngx/paperless-ngx"` | image repository |
+| image.tag | string | `""` | image tag - Overrides the image tag whose default is the chart appVersion. |
 | imagePullSecrets | list | `[]` | This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/ |
 | ingress.annotations | object | `{}` |  |
 | ingress.className | string | `""` |  |
@@ -146,7 +146,7 @@ helm uninstall paperless-ngx-release
 | redis.global.storageClass | string | `""` |  |
 | redis.master.persistence.enabled | bool | `true` |  |
 | redis.replica.persistence.enabled | bool | `true` |  |
-| replicaCount | int | `1` |  |
+| replicaCount | int | `1` | replicas |
 | resources | object | `{}` |  |
 | securityContext | object | `{}` |  |
 | service.port | int | `80` | This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports |
