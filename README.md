@@ -7,7 +7,7 @@ description: "A document management system that transforms your physical documen
 
 # paperless-ngx
 
-![Version: 0.1.24](https://img.shields.io/badge/Version-0.1.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.17.1](https://img.shields.io/badge/AppVersion-2.17.1-informational?style=flat-square)
+![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.17.1](https://img.shields.io/badge/AppVersion-2.17.1-informational?style=flat-square)
 
 A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
 
@@ -79,9 +79,11 @@ helm uninstall paperless-ngx-release
 | autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
 | config.apps | string | `nil` |  |
 | config.database.engine | string | `"postgresql"` |  |
+| config.database.existingSecret.name | string | `""` | if set it use external secret for connect to database |
+| config.database.existingSecret.passKey | string | `"password"` | configurate key of secret where the password of database use is set |
 | config.database.host | string | `""` |  |
 | config.database.name | string | `"paperless"` |  |
-| config.database.pass | string | `"paperless"` |  |
+| config.database.pass | string | `"paperless"` | password to access database (has no effect if existingSecret.name is set) |
 | config.database.port | int | `5432` |  |
 | config.database.sslmode | string | `"prefer"` |  |
 | config.database.user | string | `"paperless"` |  |

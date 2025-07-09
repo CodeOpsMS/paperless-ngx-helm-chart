@@ -58,16 +58,26 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ $fullname }}
-          {{- with .Values.redis.auth }}
-          {{- if and .enabled .existingSecret }}
           env:
+           {{- with .Values.redis.auth }}
+           {{- if and .enabled .existingSecret }}
             - name: "REDIS_PASSWORD"
               valueFrom:
                 secretKeyRef:
                   name: {{ .existingSecret }}
                   key: {{ .existingSecretPasswordKey }}
-          {{- end }}
-          {{- end }}{{/* end-with redis.auth */}}
+            {{- end }}
+            {{- end }}{{/* end-with redis.auth */}}
+
+            {{- with .Values.config.database.existingSecret }}
+            {{- if .name }}
+            - name: PAPERLESS_DBPASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name }}
+                  key: {{ .passKey }}
+            {{- end }}
+            {{- end }}{{/* end-with config.database.existingSecret */}}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

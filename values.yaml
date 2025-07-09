@@ -67,7 +67,13 @@ config:
     port: 5432
     name: "paperless"
     user: "paperless"
+    # -- password to access database (has no effect if existingSecret.name is set)
     pass: "paperless"
+    existingSecret:
+      # -- if set it use external secret for connect to database
+      name: ""
+      # -- configurate key of secret where the password of database use is set
+      passKey: "password"
     sslmode: "prefer"
   oidcProviders:
 
