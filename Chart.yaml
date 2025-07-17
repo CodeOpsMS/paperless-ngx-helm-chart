@@ -4,7 +4,7 @@ description: A document management system that transforms your physical document
 type: application
 icon: https://github.com/paperless-ngx/paperless-ngx/raw/main/resources/logo/web/svg/square.svg
 home: https://wrenix.eu/docs/helm-charts/paperless-ngx/
-version: "0.2.0"
+version: "0.2.1"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "2.17.1"
 keywords:
@@ -26,6 +26,6 @@ dependencies:
     repository: "oci://docker.io/bitnamicharts"
     condition: postgresql.enabled
   - name: redis
-    version: "21.2.10"
+    version: "21.2.12"
     repository: "oci://docker.io/bitnamicharts"
     condition: redis.enabled
