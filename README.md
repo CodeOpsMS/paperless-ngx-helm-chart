@@ -91,6 +91,7 @@ helm uninstall paperless-ngx-release
 | config.redis.prefix | string | `""` |  |
 | config.redis.url | string | `""` |  |
 | config.url | string | `nil` | default first ingress host |
+| deploymentLabels | object | `{}` | This is for setting Kubernetes Labels to a Deployment. For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ |
 | env.PAPERLESS_ENABLE_FLOWER | bool | `true` | start service for monitor background jobs e.g. for prometheus (example value for env) |
 | env.PAPERLESS_USE_X_FORWARD_HOST | bool | `true` | correct ip-address by X-Forwarded-For (example value for env) |
 | fullnameOverride | string | `""` |  |
