@@ -81,6 +81,12 @@ spec:
                   key: {{ .passKey }}
             {{- end }}
             {{- end }}{{/* end-with config.database.existingSecret */}}
+            {{- range $name, $value := .Values.env }}
+            {{- if (kindIs "map" $value) }}
+            - name: {{ $name | quote }}
+              {{- toYaml $value | nindent 14 }}
+            {{- end }}
+            {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

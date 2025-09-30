@@ -86,6 +86,12 @@ env:
   PAPERLESS_USE_X_FORWARD_HOST: true
   # -- start service for monitor background jobs e.g. for prometheus (example value for env)
   PAPERLESS_ENABLE_FLOWER: true
+  # -- example to use valuesFrom
+  # PAPERLESS_TEST:
+  #   valuesFrom:
+  #     secretKeyRef:
+  #       name: "secret"
+  #       key: "key"
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
