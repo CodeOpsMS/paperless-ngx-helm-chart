@@ -62,16 +62,6 @@ spec:
             - secretRef:
                 name: {{ $fullname }}
           env:
-           {{- with .Values.redis.auth }}
-           {{- if and .enabled .existingSecret }}
-            - name: "REDIS_PASSWORD"
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .existingSecret }}
-                  key: {{ .existingSecretPasswordKey }}
-            {{- end }}
-            {{- end }}{{/* end-with redis.auth */}}
-
             {{- with .Values.config.database.existingSecret }}
             {{- if .name }}
             - name: PAPERLESS_DBPASS

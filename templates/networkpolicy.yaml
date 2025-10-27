@@ -61,8 +61,7 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/instance: {{ .Release.Name }}
-              app.kubernetes.io/name: redis
-              app.kubernetes.io/component: master
+              app.kubernetes.io/name: valkey
     {{- end }}
     {{- with .extra }}
     {{- toYaml . | nindent 4 }}

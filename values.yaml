@@ -254,26 +254,18 @@ postgresql:
     password: paperless
     postgresPassword: supersecureadminpassword
 
-redis:
-  enabled: true
-  image:
-    repository: bitnamilegacy/redis
-  metrics:
-    image:
-      repository: bitnamilegacy/redis-exporter
-  architecture: standalone
-  auth:
-    enabled: true
-    password: 'changeme'
-    # -- name of an existing secret with Redis credentials (instead of auth.password), must be created ahead of time
-    existingSecret: ""
-    # -- Password key to be retrieved from existing secret
-    existingSecretPasswordKey: ""
-  global:
-    storageClass: ""
-  master:
-    persistence:
-      enabled: true
-  replica:
-    persistence:
-      enabled: true
+valkey:
+  internal: true
+  # -- Database ID for non-default database
+  dbid: 0
+
+  external:
+    host: valkey
+    port: 6379
+
+  service:
+    port: 6379
+
+  dataStorage:
+    className: ""
+    keepPvc: true

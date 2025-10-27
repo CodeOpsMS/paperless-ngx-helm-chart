@@ -7,7 +7,7 @@ description: "A document management system that transforms your physical documen
 
 # paperless-ngx
 
-![Version: 0.2.10](https://img.shields.io/badge/Version-0.2.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.18.4](https://img.shields.io/badge/AppVersion-2.18.4-informational?style=flat-square)
+![Version: 0.2.11](https://img.shields.io/badge/Version-0.2.11-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.18.4](https://img.shields.io/badge/AppVersion-2.18.4-informational?style=flat-square)
 
 A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
 
@@ -51,8 +51,8 @@ helm uninstall paperless-ngx-release
 
 | Repository | Name | Version |
 |------------|------|---------|
+| https://valkey.io/valkey-helm/ | valkey | 0.7.6 |
 | oci://docker.io/bitnamicharts | postgresql | ^16.5.6 |
-| oci://docker.io/bitnamicharts | redis | 22.0.7 |
 
 ## Values
 
@@ -141,17 +141,6 @@ helm uninstall paperless-ngx-release
 | prometheus.servicemonitor.scrapeTimeout | string | `nil` | scrape timeout |
 | readinessProbe.httpGet.path | string | `"/"` |  |
 | readinessProbe.httpGet.port | string | `"http"` |  |
-| redis.architecture | string | `"standalone"` |  |
-| redis.auth.enabled | bool | `true` |  |
-| redis.auth.existingSecret | string | `""` | name of an existing secret with Redis credentials (instead of auth.password), must be created ahead of time |
-| redis.auth.existingSecretPasswordKey | string | `""` | Password key to be retrieved from existing secret |
-| redis.auth.password | string | `"changeme"` |  |
-| redis.enabled | bool | `true` |  |
-| redis.global.storageClass | string | `""` |  |
-| redis.image.repository | string | `"bitnamilegacy/redis"` |  |
-| redis.master.persistence.enabled | bool | `true` |  |
-| redis.metrics.image.repository | string | `"bitnamilegacy/redis-exporter"` |  |
-| redis.replica.persistence.enabled | bool | `true` |  |
 | replicaCount | int | `1` | replicas |
 | resources | object | `{}` |  |
 | securityContext | object | `{}` |  |
@@ -162,6 +151,13 @@ helm uninstall paperless-ngx-release
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template |
 | tolerations | list | `[]` |  |
+| valkey.dataStorage.className | string | `""` |  |
+| valkey.dataStorage.keepPvc | bool | `true` |  |
+| valkey.dbid | int | `0` | Database ID for non-default database |
+| valkey.external.host | string | `"valkey"` |  |
+| valkey.external.port | int | `6379` |  |
+| valkey.internal | bool | `true` |  |
+| valkey.service.port | int | `6379` |  |
 | volumeMounts | list | `[]` |  |
 | volumes | list | `[]` |  |
 
