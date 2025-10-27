@@ -4,9 +4,9 @@ description: A document management system that transforms your physical document
 type: application
 icon: https://github.com/paperless-ngx/paperless-ngx/raw/main/resources/logo/web/svg/square.svg
 home: https://wrenix.eu/docs/helm-charts/paperless-ngx/
-version: "0.2.11"
+version: "0.3.0"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
-appVersion: "2.18.4"
+appVersion: "2.19.2"
 keywords:
   - paperless
   - paperless-ng
