@@ -7,7 +7,7 @@ description: "A document management system that transforms your physical documen
 
 # paperless-ngx
 
-![Version: 0.2.9](https://img.shields.io/badge/Version-0.2.9-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.18.4](https://img.shields.io/badge/AppVersion-2.18.4-informational?style=flat-square)
+![Version: 0.2.10](https://img.shields.io/badge/Version-0.2.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.18.4](https://img.shields.io/badge/AppVersion-2.18.4-informational?style=flat-square)
 
 A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
 
@@ -126,11 +126,12 @@ helm uninstall paperless-ngx-release
 | podAnnotations | object | `{}` | This is for setting Kubernetes Annotations to a Pod. For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/ |
 | podLabels | object | `{}` | This is for setting Kubernetes Labels to a Pod. For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ |
 | podSecurityContext | object | `{}` |  |
-| postgresql.auth.database | string | `"pretix"` |  |
-| postgresql.auth.password | string | `"pretix"` |  |
+| postgresql.auth.database | string | `"paperless"` |  |
+| postgresql.auth.password | string | `"paperless"` |  |
 | postgresql.auth.postgresPassword | string | `"supersecureadminpassword"` |  |
-| postgresql.auth.username | string | `"pretix"` |  |
+| postgresql.auth.username | string | `"paperless"` |  |
 | postgresql.enabled | bool | `true` |  |
+| postgresql.image.repository | string | `"bitnamilegacy/postgresql"` |  |
 | prometheus.rules.additionalRules | list | `[]` |  |
 | prometheus.rules.enabled | bool | `false` |  |
 | prometheus.rules.labels | object | `{}` |  |
@@ -147,7 +148,9 @@ helm uninstall paperless-ngx-release
 | redis.auth.password | string | `"changeme"` |  |
 | redis.enabled | bool | `true` |  |
 | redis.global.storageClass | string | `""` |  |
+| redis.image.repository | string | `"bitnamilegacy/redis"` |  |
 | redis.master.persistence.enabled | bool | `true` |  |
+| redis.metrics.image.repository | string | `"bitnamilegacy/redis-exporter"` |  |
 | redis.replica.persistence.enabled | bool | `true` |  |
 | replicaCount | int | `1` | replicas |
 | resources | object | `{}` |  |
