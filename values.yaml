@@ -259,10 +259,6 @@ valkey:
   # -- Database ID for non-default database
   dbid: 0
 
-  external:
-    host: valkey
-    port: 6379
-
   service:
     port: 6379
 

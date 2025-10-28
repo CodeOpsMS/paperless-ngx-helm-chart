@@ -7,7 +7,7 @@ description: "A document management system that transforms your physical documen
 
 # paperless-ngx
 
-![Version: 0.3.0](https://img.shields.io/badge/Version-0.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.19.2](https://img.shields.io/badge/AppVersion-2.19.2-informational?style=flat-square)
+![Version: 0.3.1](https://img.shields.io/badge/Version-0.3.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.19.2](https://img.shields.io/badge/AppVersion-2.19.2-informational?style=flat-square)
 
 A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
 
@@ -154,8 +154,6 @@ helm uninstall paperless-ngx-release
 | valkey.dataStorage.className | string | `""` |  |
 | valkey.dataStorage.keepPvc | bool | `true` |  |
 | valkey.dbid | int | `0` | Database ID for non-default database |
-| valkey.external.host | string | `"valkey"` |  |
-| valkey.external.port | int | `6379` |  |
 | valkey.internal | bool | `true` |  |
 | valkey.service.port | int | `6379` |  |
 | volumeMounts | list | `[]` |  |
