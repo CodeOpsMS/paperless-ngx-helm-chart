@@ -4,7 +4,7 @@ description: A document management system that transforms your physical document
 type: application
 icon: https://github.com/paperless-ngx/paperless-ngx/raw/main/resources/logo/web/svg/square.svg
 home: https://wrenix.eu/docs/helm-charts/paperless-ngx/
-version: "0.3.3"
+version: "0.3.4"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "2.19.6"
 keywords:
@@ -26,6 +26,6 @@ dependencies:
     repository: "oci://docker.io/bitnamicharts"
     condition: postgresql.enabled
   - name: valkey
-    version: "0.7.7"
+    version: "0.8.1"
     repository: "https://valkey.io/valkey-helm/"
     condition: valkey.internal
