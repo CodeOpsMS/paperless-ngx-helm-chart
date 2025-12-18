@@ -7,7 +7,7 @@ description: "A document management system that transforms your physical documen
 
 # paperless-ngx
 
-![Version: 0.3.6](https://img.shields.io/badge/Version-0.3.6-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.20.1](https://img.shields.io/badge/AppVersion-2.20.1-informational?style=flat-square)
+![Version: 0.3.7](https://img.shields.io/badge/Version-0.3.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.20.1](https://img.shields.io/badge/AppVersion-2.20.1-informational?style=flat-square)
 
 A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
 
@@ -51,7 +51,7 @@ helm uninstall paperless-ngx-release
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://valkey.io/valkey-helm/ | valkey | 0.8.1 |
+| https://valkey.io/valkey-helm/ | valkey | 0.9.2 |
 | oci://docker.io/bitnamicharts | postgresql | ^16.5.6 |
 
 ## Values
