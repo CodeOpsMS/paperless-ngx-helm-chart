@@ -1,10 +1,12 @@
 apiVersion: v2
 name: paperless-ngx
-description: A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
+description: >-
+  A community Helm chart for Paperless-ngx, a document management system
+  that transforms physical documents into a searchable online archive.
 type: application
 icon: https://github.com/paperless-ngx/paperless-ngx/raw/main/resources/logo/web/svg/square.svg
-home: https://wrenix.eu/docs/helm-charts/paperless-ngx/
-version: "0.3.19"
+home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+version: "0.3.20"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "2.20.15"
 keywords:
@@ -14,11 +16,12 @@ keywords:
   - dms
   - document
 maintainers:
-  - name: WrenIX
-    url: https://wrenix.eu
+  - name: codeopsms
+    email: codeopsms@users.noreply.github.com
+    url: https://github.com/CodeOpsMS
 sources:
+  - https://github.com/CodeOpsMS/paperless-ngx-helm-chart
   - https://github.com/paperless-ngx/paperless-ngx
-  - https://git.chaos.fyi/wrenix/helm-charts/src/branch/main/paperless-ngx
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 dependencies:
   - name: postgresql

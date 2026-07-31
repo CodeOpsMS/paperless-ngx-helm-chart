@@ -1,50 +1,65 @@
 ---
-title: "paperless-ngx"
+title: "Paperless-ngx Helm Chart"
 
-description: "A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper."
+description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 
 ---
 
-# paperless-ngx
+# Paperless-ngx Helm Chart
 
-![Version: 0.3.19](https://img.shields.io/badge/Version-0.3.19-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.20.15](https://img.shields.io/badge/AppVersion-2.20.15-informational?style=flat-square)
+[![Version: 0.3.20](https://img.shields.io/badge/Version-0.3.20-informational?style=flat-square)](Chart.yaml)
+[![AppVersion: 2.20.15](https://img.shields.io/badge/AppVersion-2.20.15-informational?style=flat-square)](Chart.yaml)
+[![License: MIT contributions](https://img.shields.io/badge/License-MIT%20contributions-blue.svg)](LICENSE)
 
-A document management system that transforms your physical documents into a searchable online archive so you can keep, well, less paper.
+> **This is a community-maintained Helm chart packaged by CodeOpsMS.**
+> It is not an official Paperless-ngx chart and does not receive official
+> support from the Paperless-ngx project.
 
-**Homepage:** <https://wrenix.eu/docs/helm-charts/paperless-ngx/>
+Paperless-ngx transforms physical documents into a searchable online archive.
+This chart deploys the application together with optional PostgreSQL and Valkey
+dependencies on Kubernetes.
+
+## Project links
+
+- **Chart source:** <https://github.com/CodeOpsMS/paperless-ngx-helm-chart>
+- **Paperless-ngx documentation:** <https://docs.paperless-ngx.com/>
+- **Paperless-ngx source:** <https://github.com/paperless-ngx/paperless-ngx>
+- **Original chart source:** <https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx>
 
 ## Maintainers
 
-| Name | Email | Url |
-| ---- | ------ | --- |
-| WrenIX |  | <https://wrenix.eu> |
+| Name | Email | URL |
+|------|-------|-----|
+| CodeOpsMS | <codeopsms@users.noreply.github.com> | <https://github.com/CodeOpsMS> |
 
-## Source Code
+## Installation
 
-* <https://github.com/paperless-ngx/paperless-ngx>
-* <https://git.chaos.fyi/wrenix/helm-charts/src/branch/main/paperless-ngx>
-* <https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx>
-
-## Usage
-
-Helm must be installed and setup to your kubernetes cluster to use the charts.
-Refer to Helm's [documentation](https://helm.sh/docs) to get started.
-Once Helm has been set up correctly, fetch the charts as follows:
+Packaged GitHub or OCI releases have not been enabled for this fork yet.
+Install the chart directly from its source repository:
 
 ```bash
-helm pull oci://codeberg.org/wrenix/helm-charts/paperless-ngx
+git clone https://github.com/CodeOpsMS/paperless-ngx-helm-chart.git
+cd paperless-ngx-helm-chart
+helm dependency build
+helm install paperless-ngx . \
+  --namespace paperless-ngx \
+  --create-namespace \
+  --values values.yaml
 ```
 
-You can install a chart release using the following command:
+To install or upgrade an existing release:
 
 ```bash
-helm install paperless-ngx-release oci://codeberg.org/wrenix/helm-charts/paperless-ngx --values values.yaml
+helm upgrade --install paperless-ngx . \
+  --namespace paperless-ngx \
+  --create-namespace \
+  --values values.yaml
 ```
 
-To uninstall a chart release use `helm`'s delete command:
+To uninstall the release:
 
 ```bash
-helm uninstall paperless-ngx-release
+helm uninstall paperless-ngx --namespace paperless-ngx
 ```
 
 ## Requirements
@@ -53,6 +68,18 @@ helm uninstall paperless-ngx-release
 |------------|------|---------|
 | https://valkey.io/valkey-helm/ | valkey | 0.9.4 |
 | oci://docker.io/bitnamicharts | postgresql | ^16.5.6 |
+
+## License and provenance
+
+Original contributions made in this CodeOpsMS fork are offered under the MIT
+License; see [LICENSE](LICENSE). The initial chart and its Git history were
+derived from the
+[WrenIX helm-charts project](https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx),
+which did not contain a license file when this fork was created. The MIT license
+does not relicense that pre-existing material. See [NOTICE](NOTICE) before
+publishing packaged releases.
+
+Paperless-ngx itself is a separate project licensed under GPL-3.0.
 
 ## Values
 
