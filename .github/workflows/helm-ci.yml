@@ -36,6 +36,9 @@ jobs:
       - name: Lint chart
         run: helm lint --strict .
 
+      - name: Check chart icon
+        run: bash .github/scripts/check-chart-icon.sh .
+
       - name: Render chart
         run: >-
           helm template ci-render .
