@@ -3,7 +3,43 @@ entries:
   paperless-ngx:
   - apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-03T11:31:32.836815865Z"
+    created: "2026-08-03T12:30:34.164952539Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: oci://docker.io/bitnamicharts
+      version: ^16.5.6
+    - condition: valkey.internal
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: 0.9.4
+    description: A community Helm chart for Paperless-ngx, a document management system
+      that transforms physical documents into a searchable online archive.
+    digest: 00ceb7c44b0281a3b0597a74fd117c62b36ccd81db2c7ddec70b2a985194b446
+    home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+    icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/v2.20.15/resources/logo/web/svg/square.svg
+    keywords:
+    - paperless
+    - paperless-ng
+    - paperless-ngx
+    - dms
+    - document
+    maintainers:
+    - email: codeopsms@users.noreply.github.com
+      name: codeopsms
+      url: https://github.com/CodeOpsMS
+    name: paperless-ngx
+    sources:
+    - https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+    - https://github.com/paperless-ngx/paperless-ngx
+    - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
+    type: application
+    urls:
+    - https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-0.3.21.tgz
+    version: 0.3.21
+  - apiVersion: v2
+    appVersion: 2.20.15
+    created: "2026-08-03T12:30:34.157231551Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -37,4 +73,4 @@ entries:
     urls:
     - https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-0.3.20.tgz
     version: 0.3.20
-generated: "2026-08-03T11:31:32.830582046Z"
+generated: "2026-08-03T12:30:34.149234634Z"
