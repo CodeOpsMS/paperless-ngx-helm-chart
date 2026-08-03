@@ -1,0 +1,136 @@
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: release-helm-chart
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v4.2.3
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate and package chart
+        id: chart
+        run: |
+          set -euo pipefail
+          helm repo add valkey https://valkey.io/valkey-helm/
+          helm dependency build .
+          helm lint --strict .
+          helm template release-validation . \
+            --namespace paperless-ngx-release \
+            >/tmp/paperless-ngx-rendered.yaml
+
+          mkdir -p .release-packages
+          helm package . --destination .release-packages
+
+          chart_name="$(helm show chart . | awk '$1 == "name:" { print $2 }')"
+          chart_version="$(helm show chart . | awk '$1 == "version:" { print $2 }')"
+          package=".release-packages/${chart_name}-${chart_version}.tgz"
+          test -s "$package"
+
+          echo "name=$chart_name" >>"$GITHUB_OUTPUT"
+          echo "version=$chart_version" >>"$GITHUB_OUTPUT"
+          echo "package=$package" >>"$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_NAME: ${{ steps.chart.outputs.name }}
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+        run: |
+          set -euo pipefail
+          tag="${CHART_NAME}-${CHART_VERSION}"
+
+          git fetch --tags --force
+          if gh release view "$tag" >/dev/null 2>&1; then
+            if ! git diff --quiet "$tag" -- \
+              .helmignore Chart.yaml Chart.lock LICENSE NOTICE README.md \
+              templates values.yaml; then
+              echo "Chart content changed without a chart version bump."
+              echo "Increase version in Chart.yaml before publishing."
+              exit 1
+            fi
+
+            rm -f "$CHART_PACKAGE"
+            gh release download "$tag" \
+              --pattern "${CHART_NAME}-${CHART_VERSION}.tgz" \
+              --dir .release-packages
+          else
+            gh release create "$tag" "$CHART_PACKAGE" \
+              --target "$GITHUB_SHA" \
+              --title "$tag" \
+              --notes "Helm chart release ${CHART_VERSION} for Paperless-ngx."
+          fi
+
+      - name: Publish Helm repository to gh-pages
+        env:
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          PAGES_URL: https://codeopsms.github.io/paperless-ngx-helm-chart
+        run: |
+          set -euo pipefail
+          pages_dir="$(mktemp -d)"
+          cleanup() {
+            git worktree remove --force "$pages_dir" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git worktree add --detach "$pages_dir" origin/gh-pages
+          else
+            git worktree add --detach "$pages_dir" "$GITHUB_SHA"
+            git -C "$pages_dir" switch --orphan gh-pages
+            git -C "$pages_dir" rm -rf --ignore-unmatch .
+          fi
+
+          cp "$CHART_PACKAGE" "$pages_dir/"
+          cp artifacthub-repo.yml "$pages_dir/artifacthub-repo.yml"
+          cp .github/pages/index.html "$pages_dir/index.html"
+          touch "$pages_dir/.nojekyll"
+
+          if [[ -f "$pages_dir/index.yaml" ]]; then
+            helm repo index "$pages_dir" \
+              --url "$PAGES_URL" \
+              --merge "$pages_dir/index.yaml"
+          else
+            helm repo index "$pages_dir" --url "$PAGES_URL"
+          fi
+
+          git -C "$pages_dir" add \
+            .nojekyll artifacthub-repo.yml index.html index.yaml \
+            "$(basename "$CHART_PACKAGE")"
+
+          if git -C "$pages_dir" diff --cached --quiet; then
+            echo "Helm repository is already up to date."
+            exit 0
+          fi
+
+          git -C "$pages_dir" commit \
+            -m "Publish paperless-ngx chart ${CHART_VERSION}"
+          git -C "$pages_dir" push origin HEAD:gh-pages

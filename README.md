@@ -24,7 +24,7 @@ dependencies on Kubernetes.
 - **Chart source:** <https://github.com/CodeOpsMS/paperless-ngx-helm-chart>
 - **Paperless-ngx documentation:** <https://docs.paperless-ngx.com/>
 - **Paperless-ngx source:** <https://github.com/paperless-ngx/paperless-ngx>
-- **Original chart source:** <https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx>
+- **Forked from:** [WrenIX paperless-ngx Helm chart](https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx)
 
 ## Maintainers
 
@@ -34,8 +34,26 @@ dependencies on Kubernetes.
 
 ## Installation
 
-Packaged GitHub or OCI releases have not been enabled for this fork yet.
-Install the chart directly from its source repository:
+### Via the Helm repository
+
+```bash
+helm repo add paperless-ngx https://codeopsms.github.io/paperless-ngx-helm-chart/
+helm repo update
+helm install paperless-ngx paperless-ngx/paperless-ngx \
+  --namespace paperless-ngx \
+  --create-namespace
+```
+
+To install or upgrade with a custom values file:
+
+```bash
+helm upgrade --install paperless-ngx paperless-ngx/paperless-ngx \
+  --namespace paperless-ngx \
+  --create-namespace \
+  --values my-values.yaml
+```
+
+### From source
 
 ```bash
 git clone https://github.com/CodeOpsMS/paperless-ngx-helm-chart.git
@@ -47,20 +65,29 @@ helm install paperless-ngx . \
   --values values.yaml
 ```
 
-To install or upgrade an existing release:
-
-```bash
-helm upgrade --install paperless-ngx . \
-  --namespace paperless-ngx \
-  --create-namespace \
-  --values values.yaml
-```
-
 To uninstall the release:
 
 ```bash
 helm uninstall paperless-ngx --namespace paperless-ngx
 ```
+
+## Artifact Hub
+
+The published Helm repository URL is:
+
+```text
+https://codeopsms.github.io/paperless-ngx-helm-chart/
+```
+
+The release workflow creates and updates the `gh-pages` branch. For the first
+release, configure **Settings → Pages → Deploy from a branch** with branch
+`gh-pages` and folder `/(root)` before registering the URL in Artifact Hub.
+
+When registering it in Artifact Hub, use `paperless-ngx-helm-chart` as the
+repository name and `Paperless-ngx Helm Chart` as the display name. After
+Artifact Hub assigns a repository ID, add it to
+[`artifacthub-repo.yml`](artifacthub-repo.yml) and publish another chart patch
+version to complete publisher verification.
 
 ## Requirements
 
