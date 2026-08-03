@@ -1,2 +1,3 @@
 charts/*.tgz
+.release-packages/
 values_test.yaml

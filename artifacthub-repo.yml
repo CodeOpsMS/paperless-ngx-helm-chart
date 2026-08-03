@@ -1,8 +1,10 @@
 # Artifact Hub assigns a unique repository ID during registration.
 #
-# 1. Publish this chart through GitHub Pages or another Helm repository.
-# 2. Register that repository at https://artifacthub.io/.
-# 3. Add the assigned ID below as `repositoryID`.
+# 1. Merge and run the release workflow to publish the chart.
+# 2. Enable GitHub Pages from the gh-pages branch and repository root.
+# 3. Register https://codeopsms.github.io/paperless-ngx-helm-chart/ at
+#    https://artifacthub.io/.
+# 4. Add the assigned ID below as `repositoryID`.
 #
 # Do not reuse the ID from the original WrenIX repository.
 

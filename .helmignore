@@ -5,6 +5,9 @@
 # Common VCS dirs
 .git/
 .gitignore
+.github/
+.release-packages/
+artifacthub-repo.yml
 .bzr/
 .bzrignore
 .hg/
