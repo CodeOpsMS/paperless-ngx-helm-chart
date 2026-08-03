@@ -1,0 +1,22 @@
+Paperless-ngx Helm Chart - provenance notice
+============================================
+
+This repository was created from the paperless-ngx directory and its retained
+Git history in the WrenIX helm-charts project:
+
+https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
+
+The upstream project did not contain a LICENSE or COPYING file when this fork
+was created and when its licensing was rechecked on 2026-07-31. Copyright in
+that pre-existing material remains with its respective authors. The MIT license
+in this repository applies only to original contributions made in this fork and
+does not grant rights to the upstream-derived material.
+
+Before publishing packaged releases, obtain and document permission or a
+license for the upstream-derived material. Retain this notice and the original
+Git history so that authorship and provenance remain visible.
+
+Paperless-ngx is a separate application project and is licensed under
+GPL-3.0. Its source is available at:
+
+https://github.com/paperless-ngx/paperless-ngx

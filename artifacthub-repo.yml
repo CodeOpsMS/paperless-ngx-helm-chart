@@ -1,1 +1,11 @@
-repositoryID: 3bc5a177-8780-4540-8edd-450af9bf1596
+# Artifact Hub assigns a unique repository ID during registration.
+#
+# 1. Publish this chart through GitHub Pages or another Helm repository.
+# 2. Register that repository at https://artifacthub.io/.
+# 3. Add the assigned ID below as `repositoryID`.
+#
+# Do not reuse the ID from the original WrenIX repository.
+
+owners:
+  - name: M.Lämmerzahl
+    email: codeopsms@users.noreply.github.com
