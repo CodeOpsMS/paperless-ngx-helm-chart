@@ -47,8 +47,12 @@ jobs:
           set -euo pipefail
           package_dir="$(mktemp -d)"
           helm package . --destination "$package_dir"
-          package="$(find "$package_dir" -maxdepth 1 -name 'paperless-ngx-*.tgz' -print -quit)"
-          test -n "$package"
+          chart_name="$(helm show chart . | awk '/^name:/ { print $2 }')"
+          chart_version="$(helm show chart . | awk '/^version:/ { print $2 }')"
+          package="$package_dir/${chart_name}-${chart_version}.tgz"
+          test -n "$chart_name"
+          test -n "$chart_version"
+          test -s "$package"
           helm show chart "$package" >/dev/null
           tar -tzf "$package" >"$package_dir/contents.txt"
           grep -qx 'paperless-ngx/LICENSE' "$package_dir/contents.txt"
