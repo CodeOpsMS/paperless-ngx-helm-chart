@@ -1,0 +1,69 @@
+name: GitHub Pages Helm Repository Healthcheck
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Detect broken Pages publishing and Artifact Hub indexing early.
+    - cron: "30 8 * * *"
+
+jobs:
+  check-pages-helm-repo:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v4.2.3
+
+      - name: Check gh-pages branch exists
+        run: |
+          set -euo pipefail
+          git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" gh-pages
+
+      - name: Check published Helm repository
+        run: |
+          set -euo pipefail
+          repo_owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          repo_url="https://${repo_owner}.github.io/${repo_name}/"
+
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 10 \
+            --output index.yaml "${repo_url}index.yaml"
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 10 \
+            --output artifacthub-repo.yml "${repo_url}artifacthub-repo.yml"
+
+          test -s index.yaml
+          grep -q '^apiVersion:' index.yaml
+          grep -q '^entries:' index.yaml
+          test -s artifacthub-repo.yml
+          grep -q '^owners:' artifacthub-repo.yml
+
+          helm repo add paperless-ngx "$repo_url"
+          published_version=$(helm search repo paperless-ngx/paperless-ngx --versions --output json \
+            | jq -r '.[0].version // empty')
+
+          release_json=$(curl --fail --silent --show-error --location --retry 3 \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest")
+          latest_tag=$(jq -r '.tag_name // empty' <<< "$release_json")
+          latest_version=${latest_tag#paperless-ngx-}
+          asset_url=$(jq -r --arg name "paperless-ngx-${latest_version}.tgz" \
+            '.assets[] | select(.name == $name) | .browser_download_url' <<< "$release_json")
+
+          if [ -z "$published_version" ] || [ "$published_version" != "$latest_version" ]; then
+            echo "Published index is stale: index=${published_version:-missing}, release=${latest_version:-missing}"
+            exit 1
+          fi
+          if [ -z "$asset_url" ]; then
+            echo "Release asset paperless-ngx-${latest_version}.tgz is missing"
+            exit 1
+          fi
+
+          helm pull paperless-ngx/paperless-ngx --version "$published_version"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output /dev/null "$asset_url"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
