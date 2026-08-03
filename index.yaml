@@ -3,7 +3,7 @@ entries:
   paperless-ngx:
   - apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-03T11:18:13.511282656Z"
+    created: "2026-08-03T11:31:32.836815865Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -37,4 +37,4 @@ entries:
     urls:
     - https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-0.3.20.tgz
     version: 0.3.20
-generated: "2026-08-03T11:18:13.503534808Z"
+generated: "2026-08-03T11:31:32.830582046Z"
