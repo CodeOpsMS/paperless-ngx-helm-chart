@@ -6,7 +6,7 @@ description: >-
 type: application
 icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/v2.20.15/resources/logo/web/svg/square.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.3.21"
+version: "0.3.22"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "2.20.15"
 keywords:
@@ -16,13 +16,21 @@ keywords:
   - dms
   - document
 maintainers:
-  - name: codeopsms
+  - name: CodeOpsMS
     email: codeopsms@users.noreply.github.com
     url: https://github.com/CodeOpsMS
 sources:
   - https://github.com/CodeOpsMS/paperless-ngx-helm-chart
   - https://github.com/paperless-ngx/paperless-ngx
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
+annotations:
+  artifacthub.io/links: |
+    - name: Chart source
+      url: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+    - name: Paperless-ngx project
+      url: https://github.com/paperless-ngx/paperless-ngx
+    - name: Forked from WrenIX
+      url: https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 dependencies:
   - name: postgresql
     version: "^16.5.6"

@@ -1,0 +1,16 @@
+version: 2
+
+updates:
+  # GitHub Actions references are updated as reviewable pull requests.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Europe/Berlin
+    commit-message:
+      prefix: ci
+    reviewers:
+      - CodeOpsMS
+    open-pull-requests-limit: 10
