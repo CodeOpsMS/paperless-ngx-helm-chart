@@ -1,9 +1,53 @@
 apiVersion: v1
 entries:
   paperless-ngx:
+  - annotations:
+      artifacthub.io/links: |
+        - name: Chart source
+          url: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+        - name: Paperless-ngx project
+          url: https://github.com/paperless-ngx/paperless-ngx
+        - name: Forked from WrenIX
+          url: https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
+    apiVersion: v2
+    appVersion: 2.20.15
+    created: "2026-08-04T13:37:51.950409301Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: oci://docker.io/bitnamicharts
+      version: ^16.5.6
+    - condition: valkey.internal
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: 0.9.4
+    description: A community Helm chart for Paperless-ngx, a document management system
+      that transforms physical documents into a searchable online archive.
+    digest: f0d93fe79db1161671681571c934cc829e8ed5a245dc09d98e50042f08d1d504
+    home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+    icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/v2.20.15/resources/logo/web/svg/square.svg
+    keywords:
+    - paperless
+    - paperless-ng
+    - paperless-ngx
+    - dms
+    - document
+    maintainers:
+    - email: codeopsms@users.noreply.github.com
+      name: CodeOpsMS
+      url: https://github.com/CodeOpsMS
+    name: paperless-ngx
+    sources:
+    - https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+    - https://github.com/paperless-ngx/paperless-ngx
+    - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
+    type: application
+    urls:
+    - https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-0.3.22.tgz
+    version: 0.3.22
   - apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-03T12:30:34.164952539Z"
+    created: "2026-08-04T13:37:51.942855972Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -39,7 +83,7 @@ entries:
     version: 0.3.21
   - apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-03T12:30:34.157231551Z"
+    created: "2026-08-04T13:37:51.935523555Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -73,4 +117,4 @@ entries:
     urls:
     - https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-0.3.20.tgz
     version: 0.3.20
-generated: "2026-08-03T12:30:34.149234634Z"
+generated: "2026-08-04T13:37:51.927751007Z"
