@@ -5,9 +5,11 @@
 # Common VCS dirs
 .git/
 .gitignore
+.mailmap
 .github/
 .release-packages/
 artifacthub-repo.yml
+renovate.json
 .bzr/
 .bzrignore
 .hg/

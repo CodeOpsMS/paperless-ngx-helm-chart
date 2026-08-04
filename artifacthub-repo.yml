@@ -1,13 +1,4 @@
-# Artifact Hub assigns a unique repository ID during registration.
-#
-# 1. Merge and run the release workflow to publish the chart.
-# 2. Enable GitHub Pages from the gh-pages branch and repository root.
-# 3. Register https://codeopsms.github.io/paperless-ngx-helm-chart/ at
-#    https://artifacthub.io/.
-# 4. Add the assigned ID below as `repositoryID`.
-#
-# Do not reuse the ID from the original WrenIX repository.
-
+repositoryID: 9d5a07d6-7540-44fe-a74c-d98953891494
 owners:
-  - name: M.Lämmerzahl
+  - name: CodeOpsMS
     email: codeopsms@users.noreply.github.com

@@ -1,22 +1,56 @@
-Paperless-ngx Helm Chart - provenance notice
-============================================
+Paperless-ngx Helm Chart - provenance and licensing notice
+===========================================================
+
+Origin
+------
 
 This repository was created from the paperless-ngx directory and its retained
 Git history in the WrenIX helm-charts project:
 
 https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 
-The upstream project did not contain a LICENSE or COPYING file when this fork
-was created and when its licensing was rechecked on 2026-07-31. Copyright in
-that pre-existing material remains with its respective authors. The MIT license
-in this repository applies only to original contributions made in this fork and
-does not grant rights to the upstream-derived material.
+The imported history in this repository ends with commit
+f83a492ed951268719d960ed43ea9de3807a4c87. Keep that history and this notice so
+that the authorship and provenance of the upstream-derived material remain
+visible.
 
-Before publishing packaged releases, obtain and document permission or a
-license for the upstream-derived material. Retain this notice and the original
-Git history so that authorship and provenance remain visible.
+Current license status
+----------------------
 
-Paperless-ngx is a separate application project and is licensed under
-GPL-3.0. Its source is available at:
+The WrenIX repository was checked again on 2026-08-04 at upstream commit
+fa911f2814cc1daaee117fa8af01ff8f25914786. No LICENSE, COPYING, NOTICE,
+COPYRIGHT, SPDX, or REUSE licensing metadata was present in the current
+tracked tree, and no license-related file was found in the reachable Git
+history. Public availability of source code alone does not establish
+permission to redistribute it.
+
+Copyright in the imported material remains with WrenIX and the other relevant
+upstream rights holders. The overall license and redistribution permission
+for the combined chart are therefore unconfirmed. In particular, this
+package must not be described as entirely MIT licensed.
+
+CodeOpsMS contributions
+-----------------------
+
+Original contributions first authored for this CodeOpsMS repository are
+offered under the MIT terms in LICENSES/CodeOpsMS-MIT.txt. Those terms do not
+relicense the imported material and do not by themselves authorize
+redistribution of the combined chart.
+
+Required resolution
+-------------------
+
+Before treating redistribution as authorized, obtain and retain an explicit
+license or permission covering the imported chart from all relevant rights
+holders, or replace the upstream-derived material with an independently
+authored implementation. Record the evidence and its scope in this notice
+before adding a package-wide license identifier to Chart.yaml or a root
+LICENSE file.
+
+Related projects
+----------------
+
+Paperless-ngx is a separate application project licensed under GPL-3.0. Its
+source and license are available at:
 
 https://github.com/paperless-ngx/paperless-ngx

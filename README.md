@@ -7,9 +7,9 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 
 # Paperless-ngx Helm Chart
 
-[![Version: 0.3.20](https://img.shields.io/badge/Version-0.3.20-informational?style=flat-square)](Chart.yaml)
-[![AppVersion: 2.20.15](https://img.shields.io/badge/AppVersion-2.20.15-informational?style=flat-square)](Chart.yaml)
-[![License: MIT contributions](https://img.shields.io/badge/License-MIT%20contributions-blue.svg)](LICENSE)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/paperless)](https://artifacthub.io/packages/helm/paperless/paperless-ngx)
+[![Release](https://img.shields.io/github/v/release/CodeOpsMS/paperless-ngx-helm-chart?label=Chart%20Version)](https://github.com/CodeOpsMS/paperless-ngx-helm-chart/releases)
+[![License status](https://img.shields.io/badge/license-see%20NOTICE-orange)](NOTICE)
 
 > **This is a community-maintained Helm chart packaged by CodeOpsMS.**
 > It is not an official Paperless-ngx chart and does not receive official
@@ -37,9 +37,9 @@ dependencies on Kubernetes.
 ### Via the Helm repository
 
 ```bash
-helm repo add paperless-ngx https://codeopsms.github.io/paperless-ngx-helm-chart/
+helm repo add paperless https://codeopsms.github.io/paperless-ngx-helm-chart/
 helm repo update
-helm install paperless-ngx paperless-ngx/paperless-ngx \
+helm install paperless-ngx paperless/paperless-ngx \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -47,7 +47,7 @@ helm install paperless-ngx paperless-ngx/paperless-ngx \
 To install or upgrade with a custom values file:
 
 ```bash
-helm upgrade --install paperless-ngx paperless-ngx/paperless-ngx \
+helm upgrade --install paperless-ngx paperless/paperless-ngx \
   --namespace paperless-ngx \
   --create-namespace \
   --values my-values.yaml
@@ -73,38 +73,66 @@ helm uninstall paperless-ngx --namespace paperless-ngx
 
 ## Artifact Hub
 
-The published Helm repository URL is:
+GitHub Pages is active and the release workflow maintains the published Helm
+repository at:
 
 ```text
 https://codeopsms.github.io/paperless-ngx-helm-chart/
 ```
 
-The release workflow creates and updates the `gh-pages` branch. For the first
-release, configure **Settings → Pages → Deploy from a branch** with branch
-`gh-pages` and folder `/(root)` before registering the URL in Artifact Hub.
+The chart is available directly on
+[Artifact Hub](https://artifacthub.io/packages/helm/paperless/paperless-ngx).
+Its registered repository metadata is:
 
-When registering it in Artifact Hub, use `paperless-ngx-helm-chart` as the
-repository name and `Paperless-ngx Helm Chart` as the display name. After
-Artifact Hub assigns a repository ID, add it to
-[`artifacthub-repo.yml`](artifacthub-repo.yml) and publish another chart patch
-version to complete publisher verification.
+| Field | Value |
+|-------|-------|
+| Repository name | `paperless` |
+| Display name | `Paperless-ngx` |
+| Repository URL | `https://codeopsms.github.io/paperless-ngx-helm-chart/` |
+
+The repository name is part of the Artifact Hub package URL and cannot be
+changed after registration. The `gh-pages` branch, `index.yaml`, and Artifact
+Hub metadata are checked daily by the Pages healthcheck workflow.
+
+## Automation
+
+Dependency discovery creates reviewable pull requests. Nothing is merged or
+published automatically from an update branch.
+
+| What | How | Interval |
+|------|-----|----------|
+| Paperless-ngx application | GitHub Releases check opens an app-version PR and bumps the chart version | Every 6 hours |
+| PostgreSQL and Valkey charts | Renovate updates `Chart.yaml` and `Chart.lock` and bumps the chart version | Weekly |
+| GitHub Actions | Dependabot opens workflow dependency PRs | Weekly |
+| Helm 3 and Helm 4 CI versions | Renovate keeps each major release line current | Weekly |
+| GitHub Pages Helm repository | Healthcheck verifies the published index and release asset | Daily |
+
+To activate all update sources, install the
+[Renovate GitHub App](https://github.com/apps/renovate) for this repository and
+keep **Settings → Actions → General → Allow GitHub Actions to create and
+approve pull requests** enabled. Renovate and Dependabot are configured to
+create PRs only; updates remain subject to the normal Helm CI review gate.
 
 ## Requirements
 
-| Repository | Name | Version |
-|------------|------|---------|
-| https://valkey.io/valkey-helm/ | valkey | 0.9.4 |
-| oci://docker.io/bitnamicharts | postgresql | ^16.5.6 |
+| Repository | Name | Version source |
+|------------|------|----------------|
+| https://valkey.io/valkey-helm/ | valkey | [Chart.yaml](Chart.yaml) |
+| oci://docker.io/bitnamicharts | postgresql | [Chart.yaml](Chart.yaml) |
 
 ## License and provenance
 
-Original contributions made in this CodeOpsMS fork are offered under the MIT
-License; see [LICENSE](LICENSE). The initial chart and its Git history were
-derived from the
-[WrenIX helm-charts project](https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx),
-which did not contain a license file when this fork was created. The MIT license
-does not relicense that pre-existing material. See [NOTICE](NOTICE) before
-publishing packaged releases.
+The combined chart does not currently have a confirmed overall license. The
+imported WrenIX source and history still contain no license grant, so this
+package must not be represented as entirely MIT licensed. Original CodeOpsMS
+contributions are offered separately under the
+[MIT terms for CodeOpsMS contributions](LICENSES/CodeOpsMS-MIT.txt); those
+terms do not relicense the imported material.
+
+Read [NOTICE](NOTICE) for the checked upstream commit, provenance, exact scope,
+and the evidence still required to establish redistribution rights. Artifact
+Hub intentionally receives no package-wide license identifier while that
+status remains unresolved.
 
 Paperless-ngx itself is a separate project licensed under GPL-3.0.
 

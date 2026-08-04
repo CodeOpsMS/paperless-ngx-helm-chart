@@ -18,6 +18,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v5
         with:
+          # renovate: datasource=github-releases depName=helm-v4 packageName=helm/helm versioning=semver
           version: v4.2.3
 
       - name: Check gh-pages branch exists
@@ -41,10 +42,12 @@ jobs:
           grep -q '^apiVersion:' index.yaml
           grep -q '^entries:' index.yaml
           test -s artifacthub-repo.yml
+          grep -q '^repositoryID: 9d5a07d6-7540-44fe-a74c-d98953891494$' artifacthub-repo.yml
           grep -q '^owners:' artifacthub-repo.yml
+          grep -q 'name: CodeOpsMS' artifacthub-repo.yml
 
-          helm repo add paperless-ngx "$repo_url"
-          published_version=$(helm search repo paperless-ngx/paperless-ngx --versions --output json \
+          helm repo add paperless "$repo_url"
+          published_version=$(helm search repo paperless/paperless-ngx --versions --output json \
             | jq -r '.[0].version // empty')
 
           release_json=$(curl --fail --silent --show-error --location --retry 3 \
@@ -66,7 +69,8 @@ jobs:
           fi
 
           chart_package="paperless-ngx-${published_version}.tgz"
-          helm pull paperless-ngx/paperless-ngx --version "$published_version"
+          helm pull paperless/paperless-ngx --version "$published_version"
+          bash .github/scripts/check-chart-package.sh "$chart_package"
           bash .github/scripts/check-chart-icon.sh "$chart_package"
           curl --fail --silent --show-error --location --retry 3 \
             --output /dev/null "$asset_url"

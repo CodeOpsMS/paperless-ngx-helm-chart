@@ -1,0 +1,72 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "helmv3",
+    "custom.regex"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "reviewers": [
+    "CodeOpsMS"
+  ],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Keep the pinned Helm 3 and Helm 4 CI versions current",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+) packageName=(?<packageName>[^\\s]+) versioning=(?<versioning>[^\\s]+)\\s+(?:-\\s+|version:\\s+)(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Update Helm chart dependencies and release them as chart patch versions",
+      "matchManagers": [
+        "helmv3"
+      ],
+      "matchFileNames": [
+        "Chart.yaml"
+      ],
+      "rangeStrategy": "bump",
+      "bumpVersion": "patch",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Use chart minor releases for major Helm dependency updates",
+      "matchManagers": [
+        "helmv3"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "bumpVersion": "minor"
+    },
+    {
+      "description": "Keep Helm 3 checks on the Helm 3 release line",
+      "matchDepNames": [
+        "helm-v3"
+      ],
+      "allowedVersions": "/^v3\\./",
+      "semanticCommitType": "ci"
+    },
+    {
+      "description": "Keep Helm 4 checks on the Helm 4 release line",
+      "matchDepNames": [
+        "helm-v4"
+      ],
+      "allowedVersions": "/^v4\\./",
+      "semanticCommitType": "ci"
+    }
+  ]
+}

@@ -1,0 +1,152 @@
+name: Auto-Update Paperless-ngx
+
+on:
+  schedule:
+    # Check the latest stable upstream release every six hours.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check for a new stable Paperless-ngx release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          current_version=$(awk '/^appVersion:/ { gsub(/"/, "", $2); print $2 }' Chart.yaml)
+          if ! [[ "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid current appVersion: ${current_version}"
+            exit 1
+          fi
+
+          release_json=$(curl --fail --silent --show-error --location --retry 3 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/paperless-ngx/paperless-ngx/releases/latest)
+          latest_tag=$(jq -r '.tag_name // empty' <<<"$release_json")
+          latest_version=${latest_tag#v}
+
+          if ! [[ "$latest_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "GitHub returned an invalid stable release tag: ${latest_tag:-missing}"
+            exit 1
+          fi
+
+          echo "Current Paperless-ngx version: ${current_version}"
+          echo "Latest stable Paperless-ngx version: ${latest_version}"
+
+          if [[ "$current_version" == "$latest_version" ]]; then
+            echo "Already up to date"
+            echo "update=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          newest_version=$(printf '%s\n%s\n' "$current_version" "$latest_version" | sort -V | tail -1)
+          if [[ "$newest_version" != "$latest_version" ]]; then
+            echo "The upstream latest release is older than appVersion; refusing a downgrade"
+            echo "update=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          current_major=${current_version%%.*}
+          latest_major=${latest_version%%.*}
+          major_update=false
+          if [[ "$current_major" != "$latest_major" ]]; then
+            major_update=true
+          fi
+
+          echo "update=true" >>"$GITHUB_OUTPUT"
+          echo "old_version=$current_version" >>"$GITHUB_OUTPUT"
+          echo "new_version=$latest_version" >>"$GITHUB_OUTPUT"
+          echo "major_update=$major_update" >>"$GITHUB_OUTPUT"
+          echo "release_url=https://github.com/paperless-ngx/paperless-ngx/releases/tag/${latest_tag}" >>"$GITHUB_OUTPUT"
+
+      - name: Update app and chart versions
+        if: steps.check.outputs.update == 'true'
+        env:
+          MAJOR_UPDATE: ${{ steps.check.outputs.major_update }}
+          NEW_APP_VERSION: ${{ steps.check.outputs.new_version }}
+          OLD_APP_VERSION: ${{ steps.check.outputs.old_version }}
+        run: |
+          set -euo pipefail
+
+          current_chart_version=$(awk '/^version:/ { gsub(/"/, "", $2); print $2 }' Chart.yaml)
+          if ! [[ "$current_chart_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid current chart version: ${current_chart_version}"
+            exit 1
+          fi
+
+          IFS=. read -r chart_major chart_minor chart_patch <<<"$current_chart_version"
+          if [[ "$MAJOR_UPDATE" == "true" ]]; then
+            new_chart_version="${chart_major}.$((chart_minor + 1)).0"
+          else
+            new_chart_version="${chart_major}.${chart_minor}.$((chart_patch + 1))"
+          fi
+
+          sed -i "s/^version: .*/version: \"${new_chart_version}\"/" Chart.yaml
+          sed -i "s/^appVersion: .*/appVersion: \"${NEW_APP_VERSION}\"/" Chart.yaml
+          sed -i \
+            "s|/v${OLD_APP_VERSION}/resources/logo|/v${NEW_APP_VERSION}/resources/logo|" \
+            Chart.yaml
+
+          grep -q "^version: \"${new_chart_version}\"$" Chart.yaml
+          grep -q "^appVersion: \"${NEW_APP_VERSION}\"$" Chart.yaml
+          grep -q "/v${NEW_APP_VERSION}/resources/logo" Chart.yaml
+
+          echo "NEW_CHART_VERSION=$new_chart_version" >>"$GITHUB_ENV"
+          echo "NEW_APP_VERSION=$NEW_APP_VERSION" >>"$GITHUB_ENV"
+          echo "OLD_APP_VERSION=$OLD_APP_VERSION" >>"$GITHUB_ENV"
+
+      - name: Create update pull request
+        id: create-pull-request
+        if: steps.check.outputs.update == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/update-paperless-ngx-${{ env.NEW_APP_VERSION }}
+          delete-branch: true
+          commit-message: "chore: update Paperless-ngx ${{ env.OLD_APP_VERSION }} -> ${{ env.NEW_APP_VERSION }}"
+          title: "chore: update Paperless-ngx ${{ env.OLD_APP_VERSION }} -> ${{ env.NEW_APP_VERSION }}"
+          body: |
+            Automated update proposed from the latest stable upstream GitHub release.
+
+            - Paperless-ngx: `${{ env.OLD_APP_VERSION }}` -> `${{ env.NEW_APP_VERSION }}`
+            - Chart version: `${{ env.NEW_CHART_VERSION }}`
+            - Major application update: `${{ steps.check.outputs.major_update }}`
+            - Release notes: ${{ steps.check.outputs.release_url }}
+
+            Review application compatibility, migrations, and release notes before merging.
+            Publishing remains handled by `release.yml` only after this PR is reviewed and merged.
+          reviewers: CodeOpsMS
+
+      - name: Verify update pull request was created
+        if: steps.check.outputs.update == 'true'
+        env:
+          PR_NUMBER: ${{ steps.create-pull-request.outputs.pull-request-number }}
+          PR_URL: ${{ steps.create-pull-request.outputs.pull-request-url }}
+        run: |
+          if [[ -z "$PR_NUMBER" || -z "$PR_URL" ]]; then
+            echo "The update branch was created, but no pull request was returned."
+            echo "Verify that GitHub Actions may create pull requests in repository settings."
+            exit 1
+          fi
+          echo "Created pull request #${PR_NUMBER}: ${PR_URL}"
+
+      # Pull requests created with GITHUB_TOKEN do not emit pull_request events.
+      - name: Dispatch chart validation
+        if: steps.check.outputs.update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_BRANCH: chore/update-paperless-ngx-${{ env.NEW_APP_VERSION }}
+        run: gh workflow run helm-ci.yml --ref "$UPDATE_BRANCH"
