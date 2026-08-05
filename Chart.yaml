@@ -4,9 +4,9 @@ description: >-
   A community Helm chart for Paperless-ngx, a document management system
   that transforms physical documents into a searchable online archive.
 type: application
-icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/v2.20.15/resources/logo/web/svg/square.svg
+icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.3.22"
+version: "0.3.23"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "2.20.15"
 keywords:

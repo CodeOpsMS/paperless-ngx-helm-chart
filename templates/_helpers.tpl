@@ -6,6 +6,20 @@ Expand the name of the chart.
 {{- end }}
 
 {{/*
+Build the Paperless-ngx image reference. An immutable digest takes precedence
+over the mutable tag while retaining the configured registry and repository.
+*/}}
+{{- define "paperless-ngx.image" -}}
+{{- $registry := coalesce .Values.global.image.registry .Values.image.registry -}}
+{{- $repository := printf "%s/%s" $registry .Values.image.repository -}}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" $repository .Values.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" $repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.

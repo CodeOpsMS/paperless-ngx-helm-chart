@@ -4,9 +4,15 @@ set -euo pipefail
 
 chart_ref="${1:-.}"
 icon_url="$(helm show chart "$chart_ref" | awk '/^icon:/ { print $2 }')"
+expected_icon_url="https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg"
 
 if [[ -z "$icon_url" ]]; then
   echo "::error::Chart metadata does not define an icon URL"
+  exit 1
+fi
+
+if [[ "$icon_url" != "$expected_icon_url" ]]; then
+  echo "::error::Chart icon must use the stable upstream URL: $expected_icon_url"
   exit 1
 fi
 

@@ -31,6 +31,16 @@ jobs:
             exit 1
           fi
 
+          current_digest=$(awk '
+            /^image:/ { in_image=1; next }
+            in_image && /^  digest:/ { gsub(/"/, "", $2); print $2; exit }
+            in_image && /^[^ ]/ { exit }
+          ' values.yaml)
+          if ! [[ "$current_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid current Paperless-ngx image digest: ${current_digest:-missing}"
+            exit 1
+          fi
+
           release_json=$(curl --fail --silent --show-error --location --retry 3 \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
@@ -46,12 +56,6 @@ jobs:
           echo "Current Paperless-ngx version: ${current_version}"
           echo "Latest stable Paperless-ngx version: ${latest_version}"
 
-          if [[ "$current_version" == "$latest_version" ]]; then
-            echo "Already up to date"
-            echo "update=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           newest_version=$(printf '%s\n%s\n' "$current_version" "$latest_version" | sort -V | tail -1)
           if [[ "$newest_version" != "$latest_version" ]]; then
             echo "The upstream latest release is older than appVersion; refusing a downgrade"
@@ -61,22 +65,63 @@ jobs:
 
           current_major=${current_version%%.*}
           latest_major=${latest_version%%.*}
-          major_update=false
           if [[ "$current_major" != "$latest_major" ]]; then
-            major_update=true
+            echo "Paperless-ngx ${latest_version} is a major update."
+            echo "Major updates require a dedicated, manually prepared migration pull request."
+            echo "update=false" >>"$GITHUB_OUTPUT"
+            echo "major_update_available=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          registry_token=$(curl --fail --silent --show-error --location --retry 3 \
+            'https://ghcr.io/token?scope=repository%3Apaperless-ngx%2Fpaperless-ngx%3Apull&service=ghcr.io' \
+            | jq -r '.token // empty')
+          if [[ -z "$registry_token" ]]; then
+            echo "Unable to obtain a public GHCR pull token"
+            exit 1
+          fi
+
+          manifest_headers=$(mktemp)
+          curl --fail --silent --show-error --head --location --retry 3 \
+            -H "Authorization: Bearer ${registry_token}" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+            --output /dev/null \
+            --dump-header "$manifest_headers" \
+            "https://ghcr.io/v2/paperless-ngx/paperless-ngx/manifests/${latest_version}"
+          latest_digest=$(awk -F': ' '
+            tolower($1) == "docker-content-digest" {
+              gsub("\\r", "", $2)
+              print $2
+              exit
+            }
+          ' "$manifest_headers")
+          rm -f "$manifest_headers"
+          if ! [[ "$latest_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "GHCR returned an invalid manifest digest: ${latest_digest:-missing}"
+            exit 1
+          fi
+
+          if [[ "$current_version" == "$latest_version" && "$current_digest" == "$latest_digest" ]]; then
+            echo "Already up to date"
+            echo "update=false" >>"$GITHUB_OUTPUT"
+            exit 0
           fi
 
           echo "update=true" >>"$GITHUB_OUTPUT"
           echo "old_version=$current_version" >>"$GITHUB_OUTPUT"
           echo "new_version=$latest_version" >>"$GITHUB_OUTPUT"
-          echo "major_update=$major_update" >>"$GITHUB_OUTPUT"
+          echo "old_digest=$current_digest" >>"$GITHUB_OUTPUT"
+          echo "new_digest=$latest_digest" >>"$GITHUB_OUTPUT"
+          echo "major_update=false" >>"$GITHUB_OUTPUT"
           echo "release_url=https://github.com/paperless-ngx/paperless-ngx/releases/tag/${latest_tag}" >>"$GITHUB_OUTPUT"
 
       - name: Update app and chart versions
         if: steps.check.outputs.update == 'true'
         env:
           MAJOR_UPDATE: ${{ steps.check.outputs.major_update }}
+          NEW_IMAGE_DIGEST: ${{ steps.check.outputs.new_digest }}
           NEW_APP_VERSION: ${{ steps.check.outputs.new_version }}
+          OLD_IMAGE_DIGEST: ${{ steps.check.outputs.old_digest }}
           OLD_APP_VERSION: ${{ steps.check.outputs.old_version }}
         run: |
           set -euo pipefail
@@ -88,25 +133,26 @@ jobs:
           fi
 
           IFS=. read -r chart_major chart_minor chart_patch <<<"$current_chart_version"
-          if [[ "$MAJOR_UPDATE" == "true" ]]; then
-            new_chart_version="${chart_major}.$((chart_minor + 1)).0"
-          else
-            new_chart_version="${chart_major}.${chart_minor}.$((chart_patch + 1))"
+          if [[ "$MAJOR_UPDATE" != "false" ]]; then
+            echo "This workflow must never prepare a major application update"
+            exit 1
           fi
+          new_chart_version="${chart_major}.${chart_minor}.$((chart_patch + 1))"
 
           sed -i "s/^version: .*/version: \"${new_chart_version}\"/" Chart.yaml
           sed -i "s/^appVersion: .*/appVersion: \"${NEW_APP_VERSION}\"/" Chart.yaml
-          sed -i \
-            "s|/v${OLD_APP_VERSION}/resources/logo|/v${NEW_APP_VERSION}/resources/logo|" \
-            Chart.yaml
+          sed -i "0,/^  digest: .*/s//  digest: \"${NEW_IMAGE_DIGEST}\"/" values.yaml
 
           grep -q "^version: \"${new_chart_version}\"$" Chart.yaml
           grep -q "^appVersion: \"${NEW_APP_VERSION}\"$" Chart.yaml
-          grep -q "/v${NEW_APP_VERSION}/resources/logo" Chart.yaml
+          grep -q "^  digest: \"${NEW_IMAGE_DIGEST}\"$" values.yaml
+          grep -q '^icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg$' Chart.yaml
 
           echo "NEW_CHART_VERSION=$new_chart_version" >>"$GITHUB_ENV"
           echo "NEW_APP_VERSION=$NEW_APP_VERSION" >>"$GITHUB_ENV"
           echo "OLD_APP_VERSION=$OLD_APP_VERSION" >>"$GITHUB_ENV"
+          echo "NEW_IMAGE_DIGEST=$NEW_IMAGE_DIGEST" >>"$GITHUB_ENV"
+          echo "OLD_IMAGE_DIGEST=$OLD_IMAGE_DIGEST" >>"$GITHUB_ENV"
 
       - name: Create update pull request
         id: create-pull-request
@@ -122,6 +168,7 @@ jobs:
             Automated update proposed from the latest stable upstream GitHub release.
 
             - Paperless-ngx: `${{ env.OLD_APP_VERSION }}` -> `${{ env.NEW_APP_VERSION }}`
+            - Image digest: `${{ env.OLD_IMAGE_DIGEST }}` -> `${{ env.NEW_IMAGE_DIGEST }}`
             - Chart version: `${{ env.NEW_CHART_VERSION }}`
             - Major application update: `${{ steps.check.outputs.major_update }}`
             - Release notes: ${{ steps.check.outputs.release_url }}
