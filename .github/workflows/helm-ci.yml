@@ -50,6 +50,9 @@ jobs:
           --namespace paperless-ngx-ci
           >/tmp/paperless-ngx-rendered.yaml
 
+      - name: Verify internal dependency service discovery
+        run: scripts/verify-internal-service-names.sh
+
       - name: Package chart
         run: |
           set -euo pipefail
