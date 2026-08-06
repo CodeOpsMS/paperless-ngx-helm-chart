@@ -10,6 +10,23 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-paperless-ngx
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: web
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: PAPERLESS_DBPASS
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: release-name-postgresql
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: password
+      - notExists:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
 
   - it: falls back to appVersion when the digest and tag are empty
     set:
@@ -22,6 +39,9 @@ tests:
 
   - it: allows thirty minutes for migrations and Tantivy indexing
     asserts:
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 2100
       - equal:
           path: spec.template.spec.containers[0].startupProbe.periodSeconds
           value: 10
@@ -77,6 +97,24 @@ tests:
           path: spec.template.spec.containers[0].env[2].valueFrom.secretKeyRef.name
           value: redis-secret
 
+  - it: uses an explicit non-sensitive revision instead of secret-derived hashes
+    set:
+      config.secretRevision: 7
+      postgresql.enabled: false
+      config.database.host: postgres.example.invalid
+      config.database.password: low-entropy-database-password
+      valkey.internal: false
+      config.redis.url: redis://:low-entropy-broker-password@redis.example.invalid:6379/0
+      env.PAPERLESS_EMAIL_HOST_PASSWORD: low-entropy-mail-password
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["paperless-ngx.codeopsms.de/secret-revision"]
+          value: "7"
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/config"]
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/env"]
+
   - it: supports valueFrom for additional Paperless settings
     set:
       env:
@@ -87,9 +125,95 @@ tests:
               key: password
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].env[0].name
+          path: spec.template.spec.containers[0].env[1].name
           value: PAPERLESS_EMAIL_HOST_PASSWORD
       - equal:
-          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name
           value: smtp-secret
 
+  - it: references the exact existing PostgreSQL user password key
+    set:
+      postgresql.auth.existingSecret: database-credentials
+      postgresql.auth.secretKeys.userPasswordKey: application-password
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: database-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: application-password
+
+  - it: references the PostgreSQL admin password for the postgres user
+    set:
+      postgresql.auth.username: postgres
+      postgresql.auth.existingSecret: database-credentials
+      postgresql.auth.secretKeys.adminPasswordKey: administrator-password
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: database-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: administrator-password
+
+  - it: follows templated global PostgreSQL credential overrides
+    release:
+      name: paperless-fresh
+    set:
+      global.postgresql.auth.username: paperless_global
+      global.postgresql.auth.existingSecret: '{{ .Release.Name }}-database-credentials'
+      global.postgresql.auth.secretKeys.userPasswordKey: '{{ .Release.Name }}-application-password'
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: paperless-fresh-database-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: paperless-fresh-application-password
+
+  - it: keeps the credential Secret at the base fullname for replication
+    release:
+      name: paperless-fresh
+    set:
+      postgresql.architecture: replication
+      postgresql.primary.name: leader
+      postgresql.fullnameOverride: paperless-database
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: paperless-database
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: password
+
+  - it: disables token mounting when an existing service account is used
+    set:
+      serviceAccount.create: false
+      serviceAccount.name: shared-paperless
+      serviceAccount.automount: false
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: shared-paperless
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: supports explicitly mounting an existing service account token
+    set:
+      serviceAccount.create: false
+      serviceAccount.name: shared-paperless
+      serviceAccount.automount: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+
+  - it: ignores a database password secret for SQLite
+    set:
+      config.database.engine: sqlite
+      config.database.existingSecret.name: unused-database-secret
+      postgresql.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env

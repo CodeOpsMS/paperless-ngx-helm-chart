@@ -14,11 +14,11 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Check auto-merge eligibility
+      - name: Check patch-only auto-merge eligibility
         id: eligibility
         env:
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
@@ -27,9 +27,9 @@ jobs:
         run: |
           eligible=false
           if [[ "$PACKAGE_ECOSYSTEM" == "github_actions" ]] && \
-             [[ "$UPDATE_TYPE" == "version-update:semver-patch" || "$UPDATE_TYPE" == "version-update:semver-minor" ]]; then
+             [[ "$UPDATE_TYPE" == "version-update:semver-patch" ]]; then
             case "$DEPENDENCY_NAMES" in
-              actions/checkout|actions/setup-python|actions/upload-artifact|azure/setup-helm|dependabot/fetch-metadata|helm/chart-testing-action|helm/kind-action|peter-evans/create-pull-request)
+              actions/checkout|actions/setup-python|actions/upload-artifact)
                 eligible=true
                 ;;
             esac

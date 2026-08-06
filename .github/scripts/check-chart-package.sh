@@ -33,6 +33,11 @@ if grep -q "^${chart_name}/.github/" "$contents"; then
   exit 1
 fi
 
+if grep -Eq "^${chart_name}/\.(candidate|release-packages)/" "$contents"; then
+  echo "The packaged chart must not contain local chart build artifacts"
+  exit 1
+fi
+
 if grep -qx "${chart_name}/renovate.json" "$contents"; then
   echo "The packaged chart must not contain repository automation config"
   exit 1

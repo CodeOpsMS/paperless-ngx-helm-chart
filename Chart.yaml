@@ -25,21 +25,25 @@ sources:
   - https://github.com/paperless-ngx/paperless-ngx
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 annotations:
-  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
+    - kind: security
+      description: Include security fixes shipped in Paperless-ngx 3.0.0 and Valkey 9.0.3, carried forward by Valkey 9.0.5
     - kind: changed
       description: Upgrade Paperless-ngx from 2.20.15 to 3.0.5
     - kind: added
       description: Add strict values validation, immutable image pins, and Paperless 3 upgrade guidance
     - kind: fixed
       description: Use a stable upstream icon URL and migration-safe startup probes
+    - kind: fixed
+      description: Replace Secret-derived pod annotation hashes with an explicit non-sensitive rollout revision
   artifacthub.io/images: |
     - name: Paperless-ngx
       image: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
     - name: PostgreSQL
       image: docker.io/bitnamilegacy/postgresql@sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d
     - name: Valkey
-      image: docker.io/valkey/valkey:9.0.2@sha256:930b41430fb727f533c5982fe509b6f04233e26d0f7354e04de4b0d5c706e44e
+      image: docker.io/valkey/valkey:9.0.5@sha256:0381fe6dfb72c73580a43b0510a6b31909a9650ac6c7e4946cf75c074a658357
     - name: Helm test
       image: docker.io/library/busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
   artifacthub.io/links: |

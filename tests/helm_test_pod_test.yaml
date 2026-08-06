@@ -8,6 +8,9 @@ tests:
           path: spec.automountServiceAccountToken
           value: false
       - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: test
+      - equal:
           path: spec.containers[0].image
           value: busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
       - equal:
@@ -29,3 +32,11 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: preserves the test suffix within the Kubernetes name limit
+    set:
+      fullnameOverride: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: metadata.name
+          value: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-test-connection

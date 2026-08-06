@@ -1,9 +1,10 @@
 # Upgrade to chart 0.4.0 and Paperless-ngx 3
 
 Chart 0.4.0 upgrades Paperless-ngx from 2.20.15 to 3.0.5. PostgreSQL stays on
-17.6 and Valkey stays on 9.0.2. Keeping those services unchanged deliberately
-isolates the Paperless database and search migrations from database-engine and
-broker major upgrades.
+17.6 for the tested bundled upgrade path, while Valkey receives the compatible
+9.0.5 security update. Keeping the database engine unchanged deliberately
+isolates the Paperless database and search migrations from a database-engine
+major upgrade.
 
 This procedure is mandatory for existing installations. Test it with a restored
 copy of production data before scheduling the production change.
@@ -77,7 +78,10 @@ unchanged and do not use `--reuse-values`.
 
 | Chart 0.3.x | Chart 0.4.0 |
 |-------------|-------------|
-| `config.database.pass` | `config.database.password` |
+| `config.database.pass` for an external database | `config.database.password` or, preferably, `config.database.existingSecret` |
+| `config.database.name` / `user` for the bundled database | Keep their new defaults and configure `postgresql.auth.database` / `username` |
+| `config.database.pass` for the bundled database | Remove it; Paperless now reads the exact PostgreSQL dependency Secret/key |
+| Static bundled `postgresql.auth.password` / `postgresPassword` defaults | Empty values generate random credentials on fresh installs and preserve the existing PostgreSQL Secret during an in-cluster upgrade |
 | `config.database.existingSecret.passKey` | `config.database.existingSecret.passwordKey` |
 | `config.database.sslmode: require` | `config.database.options: sslmode=require` |
 | `env.PAPERLESS_SECRET_KEY` | `config.secretKey.existingSecret` or the preserved chart-generated Secret |
@@ -85,6 +89,10 @@ unchanged and do not use `--reuse-values`.
 | `env.<NAME>.valuesFrom` | `env.<NAME>.valueFrom` |
 | `env.PAPERLESS_CONSUMER_INOTIFY_DELAY` | `env.PAPERLESS_CONSUMER_STABILITY_DELAY` |
 | API clients using versions 1-8 | API version 9 or 10 |
+| `livenessProbe.httpGet.path` | `livenessProbe.enabled: true` and `livenessProbe.path` |
+| `readinessProbe.httpGet.path` | `readinessProbe.enabled: true` and `readinessProbe.path` |
+| `livenessProbe.httpGet.port` / `readinessProbe.httpGet.port` | Remove; both probes now use the fixed named port `http` |
+| Empty or omitted legacy probe object | Set the corresponding `enabled: false` only when the probe should be disabled; otherwise start from the 0.4.0 defaults |
 
 Validate the migrated file before touching the cluster:
 
@@ -105,6 +113,41 @@ If an external Secret is not configured, the chart preserves its generated
 `PAPERLESS_SECRET_KEY` using a Kubernetes lookup. A GitOps renderer without
 cluster access cannot perform that lookup; production GitOps installations
 should use `config.secretKey.existingSecret`.
+
+The bundled PostgreSQL credentials follow the same upgrade-safety principle,
+but their source is exclusively `postgresql.auth`. With empty password values,
+the Bitnami dependency looks up and reuses the existing PostgreSQL Secret during
+an in-cluster Helm upgrade; on a fresh install it generates random values.
+Paperless references that dependency Secret directly. For offline GitOps
+rendering, set `postgresql.auth.existingSecret` and provide the configured
+`postgresql.auth.secretKeys`. Do not copy a bundled password into
+`config.database.password`; the schema rejects that ambiguous configuration.
+
+Do not increment `postgresql.credentialsRevision` during this Paperless-only
+upgrade: with unchanged credentials the revision must remain `0` (or retain its
+previous value). For a separate, planned credential rotation, update the
+database or externally managed Secret first, increment
+`postgresql.credentialsRevision` in the same reviewed Helm change, and verify
+the Paperless rollout. The revision is deliberately non-sensitive; never put a
+password or password hash in it or in another pod-template annotation.
+
+Pod annotations no longer contain deterministic hashes of the complete
+`config` or `env` blocks because those values may include low-entropy
+credentials. Instead, set the non-sensitive `config.secretRevision` to a new
+integer whenever another `config` value changes data in the chart-managed
+Secret (including `config.oidcProviders`), a scalar `env` value changes, or an
+externally managed Secret is updated in place. Keep it at `0` for this upgrade
+unless such a change is part of the reviewed values migration. Never copy a
+credential or credential hash into the revision.
+
+The bundled Valkey integration supports neither authentication nor TLS because
+the parent chart constructs an unauthenticated in-cluster URL. If either is
+required, use a separately managed broker, set `valkey.internal=false`, and
+reference its complete `redis://` or `rediss://` URL with
+`config.redis.existingSecret`. Do not enable `valkey.auth.enabled` or
+`valkey.tls.enabled` on the bundled dependency. Likewise,
+`postgresql.namespaceOverride` is unsupported: Paperless and the bundled
+PostgreSQL credential Secret must remain in the Helm release namespace.
 
 ## Backup and restore rehearsal
 
@@ -150,7 +193,24 @@ Keep backup files encrypted and outside the cluster.
 6. Restore the database dump into a temporary PostgreSQL 17 database or
    instance and verify that it contains the expected users and documents. The
    automated upgrade test performs this logical restore rehearsal for its
-   synthetic dataset.
+   synthetic dataset with a clean `psql` session, stop-on-error behavior, and a
+   single transaction. Create the empty target from `template0`, and use the
+   same fail-closed options for a manual rehearsal:
+
+   ```bash
+   PGPASSWORD='<database-password>' createdb \
+     -U paperless -T template0 paperless_restore
+   PGPASSWORD='<database-password>' psql \
+     -X --set=ON_ERROR_STOP=1 --single-transaction \
+     -U paperless -d paperless_restore \
+     <paperless-postgresql-17.sql
+   ```
+
+   Before the dump and after the restore, compare exact row counts for at least
+   `auth_user`, `documents_document`, `documents_tag`,
+   `documents_correspondent`, `documents_documenttype`,
+   `documents_customfield`, and `documents_savedview`. A successful `psql`
+   process alone is not sufficient restore evidence.
 
 Do not proceed until both the database restore and persistent-file restore have
 been rehearsed.
@@ -177,7 +237,7 @@ been rehearsed.
      --reset-values \
      --values paperless-0.4-values.yaml \
      --wait \
-     --timeout 30m
+     --timeout 40m
    ```
 
    Do not use `--reuse-values`, `--atomic`, or `--cleanup-on-fail`. An automatic
@@ -195,7 +255,10 @@ Before ending maintenance, verify:
 - `/api/status/` reports Paperless 3.0.5, PostgreSQL status `OK`, no unapplied
   migrations, a healthy Redis/Valkey connection, and a healthy search index;
 - PostgreSQL still reports version 17.6 and uses the original PVC;
-- Valkey still reports version 9.0.2;
+- Valkey still reports version 9.0.5;
+- every pre-upgrade PVC name and Kubernetes UID is unchanged;
+- ownership and modes of the Paperless data, media, consume, and export mount
+  roots are unchanged (or any deliberate correction is reviewed and recorded);
 - users and authentication providers still work;
 - document counts, tags, correspondents, document types, notes, custom fields,
   saved views, and permissions match the pre-upgrade inventory;
@@ -222,6 +285,11 @@ If acceptance fails:
 7. Re-run document-count, authentication, search, and file-hash checks before
    reopening the service.
 
-PostgreSQL 18, a maintained replacement for the archived Bitnami Legacy image,
-and later Valkey updates require separate changes and migration tests after the
-Paperless 3 upgrade is stable.
+The bundled `bitnamilegacy/postgresql` 17.6 image remains in this release only
+to keep the tested Paperless 2-to-3 migration baseline unchanged. Bitnami
+Legacy images are archived and do not receive normal maintenance. New and
+production deployments should use a maintained external PostgreSQL 17 service
+(currently PostgreSQL 17.10) with `postgresql.enabled=false`, an explicit
+`config.database.host`, and externally managed credentials. This PR does not
+perform an automatic PostgreSQL 18 migration; that requires a separate,
+rehearsed database upgrade after Paperless 3 is stable.

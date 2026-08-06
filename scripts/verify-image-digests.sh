@@ -17,7 +17,7 @@ pinned_images=$(render_images)
 tagged_images=$(render_images \
   --set-string image.digest= \
   --set-string postgresql.image.digest= \
-  --set-string valkey.image.tag=9.0.2 \
+  --set-string valkey.image.tag=9.0.5 \
   --set-string tests.image.digest=)
 
 assert_reference() {
@@ -56,7 +56,7 @@ postgres_digest=$(awk '
   in_postgresql && /^  image:/ { in_image=1; next }
   in_postgresql && in_image && /^    digest:/ { gsub(/"/, "", $2); print $2; exit }
 ' "$ROOT_DIR/values.yaml")
-valkey_tag=9.0.2
+valkey_tag=9.0.5
 valkey_digest=$(awk '
   /^valkey:/ { in_valkey=1; next }
   in_valkey && /^  image:/ { in_image=1; next }

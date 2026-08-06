@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check for a new stable Paperless-ngx release
         id: check
@@ -131,6 +131,17 @@ jobs:
             echo "Invalid current chart version: ${current_chart_version}"
             exit 1
           fi
+          previous_security_status=$(awk '
+            /^  artifacthub.io\/containsSecurityUpdates:/ {
+              gsub(/"/, "", $2)
+              print $2
+              exit
+            }
+          ' Chart.yaml)
+          if [[ "$previous_security_status" != "true" && "$previous_security_status" != "false" ]]; then
+            echo "Invalid Artifact Hub security update status: ${previous_security_status:-missing}"
+            exit 1
+          fi
 
           IFS=. read -r chart_major chart_minor chart_patch <<<"$current_chart_version"
           if [[ "$MAJOR_UPDATE" != "false" ]]; then
@@ -153,6 +164,13 @@ jobs:
           sed -i "s/${current_chart_version}/${new_chart_version}/g" \
             _docs.gotmpl UPGRADE-0.4.md TESTING.md
 
+          # A new upstream release must be reviewed on its own merits. Do not
+          # carry the previous chart release's security annotation forward.
+          sed -i \
+            's/^  artifacthub.io\/containsSecurityUpdates: "true"$/  artifacthub.io\/containsSecurityUpdates: "false"/' \
+            Chart.yaml
+          sed -i '/^    - kind: security$/,+1d' Chart.yaml
+
           scripts/generate-readme.sh
 
           grep -q "^version: \"${new_chart_version}\"$" Chart.yaml
@@ -160,17 +178,23 @@ jobs:
           grep -q "^  digest: \"${NEW_IMAGE_DIGEST}\"$" values.yaml
           grep -q "image: ghcr.io/paperless-ngx/paperless-ngx@${NEW_IMAGE_DIGEST}" Chart.yaml
           grep -q '^icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg$' Chart.yaml
+          grep -q '^  artifacthub.io/containsSecurityUpdates: "false"$' Chart.yaml
+          if grep -q '^    - kind: security$' Chart.yaml; then
+            echo "The previous release's Artifact Hub security change was not reset"
+            exit 1
+          fi
 
           echo "NEW_CHART_VERSION=$new_chart_version" >>"$GITHUB_ENV"
           echo "NEW_APP_VERSION=$NEW_APP_VERSION" >>"$GITHUB_ENV"
           echo "OLD_APP_VERSION=$OLD_APP_VERSION" >>"$GITHUB_ENV"
           echo "NEW_IMAGE_DIGEST=$NEW_IMAGE_DIGEST" >>"$GITHUB_ENV"
           echo "OLD_IMAGE_DIGEST=$OLD_IMAGE_DIGEST" >>"$GITHUB_ENV"
+          echo "PREVIOUS_SECURITY_STATUS=$previous_security_status" >>"$GITHUB_ENV"
 
       - name: Create update pull request
         id: create-pull-request
         if: steps.check.outputs.update == 'true'
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: chore/update-paperless-ngx-${{ env.NEW_APP_VERSION }}
@@ -185,8 +209,13 @@ jobs:
             - Chart version: `${{ env.NEW_CHART_VERSION }}`
             - Major application update: `${{ steps.check.outputs.major_update }}`
             - Release notes: ${{ steps.check.outputs.release_url }}
+            - Previous Artifact Hub security flag: `${{ env.PREVIOUS_SECURITY_STATUS }}`
+            - New Artifact Hub security flag: reset to `false` pending this release review
 
             Review application compatibility, migrations, and release notes before merging.
+            In particular, determine whether this Paperless release contains security fixes. If it
+            does, set `artifacthub.io/containsSecurityUpdates` back to `true` and add a matching
+            `kind: security` entry to `artifacthub.io/changes` before merging.
             Publishing remains handled by `release.yml` only after this PR is reviewed and merged.
           reviewers: CodeOpsMS
 

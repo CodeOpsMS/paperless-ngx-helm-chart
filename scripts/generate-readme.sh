@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ROOT_DIR=${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 HELM_DOCS_VERSION=1.14.2
 HELM_DOCS_BIN=${HELM_DOCS_BIN:-}
 
@@ -45,6 +45,13 @@ if [[ -z "$HELM_DOCS_BIN" ]]; then
 
   tar -xzf "$download_dir/$archive" -C "$download_dir"
   HELM_DOCS_BIN="$download_dir/helm-docs"
+fi
+
+version_output=$("$HELM_DOCS_BIN" --version 2>&1)
+if ! printf '%s\n' "$version_output" \
+  | grep -Eq "(^|[^0-9.])v?${HELM_DOCS_VERSION//./\\.}([^0-9.]|$)"; then
+  echo "Expected helm-docs ${HELM_DOCS_VERSION}, got: ${version_output}" >&2
+  exit 1
 fi
 
 "$HELM_DOCS_BIN" \

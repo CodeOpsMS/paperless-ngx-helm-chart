@@ -1,4 +1,10 @@
 global:
+  # -- Global image pull secret names for the PostgreSQL and Valkey dependencies.
+  imagePullSecrets: []
+  # -- Global default StorageClass for dependency PVCs.
+  defaultStorageClass: ""
+  # -- Deprecated dependency StorageClass alias; use global.defaultStorageClass.
+  storageClass: ""
   image:
     # -- if set it will overwrite all registry entries
     registry:
@@ -64,10 +70,19 @@ strategy:
   # -- Deployment strategy. RollingUpdate preserves the existing scaling behavior.
   type: RollingUpdate
 
+# -- Deadline for a Deployment rollout. The default leaves five minutes of
+# headroom beyond the 30-minute startup probe window used for migrations.
+progressDeadlineSeconds: 2100
+
 # -- Grace period for Paperless workers to stop cleanly.
 terminationGracePeriodSeconds: 60
 
 config:
+  # -- Non-sensitive rollout revision for Secret-backed Paperless settings.
+  # Increment this when another config value changes the chart-managed Secret,
+  # a scalar env value changes, or referenced Secret contents change. Never put
+  # a credential or credential hash here.
+  secretRevision: 0
   # -- Public Paperless URL. Empty derives the URL from the first ingress host.
   url: ""
   # -- Additional Django applications.
@@ -88,20 +103,30 @@ config:
       # -- Key in the existing Secret.
       urlKey: "url"
   database:
+    # -- External database engine. Keep postgresql when the bundled dependency is
+    # enabled. For MariaDB and SQLite, disable the bundled PostgreSQL dependency.
+    # SQLite ignores host, port, name, user, password and password Secret.
     engine: "postgresql"
+    # -- External database host. Ignored when postgresql.enabled is true.
     host: ""
-    port: 5432
+    # -- Database port. Empty lets Paperless select the engine default: 5432
+    # for PostgreSQL or 3306 for MariaDB.
+    port:
+    # -- External database name. Bundled database identity comes from postgresql.auth.
     name: "paperless"
+    # -- External database user. Bundled database identity comes from postgresql.auth.
     user: "paperless"
-    # -- Database password. Ignored when config.database.existingSecret.name is set.
-    password: "paperless"
+    # -- External database password. Set exactly one of this value and
+    # config.database.existingSecret.name for a non-SQLite external database.
+    password: ""
     existingSecret:
       # -- Existing Secret containing the database password.
       name: ""
       # -- Key in the existing Secret.
       passwordKey: "password"
-    # -- Paperless 3 database options, for example sslmode=require,pool.max_size=5.
-    options: "sslmode=prefer"
+    # -- Engine-specific Paperless 3 database options, for example
+    # sslmode=require,pool.max_size=5 for PostgreSQL or timeout=20 for SQLite.
+    options: ""
   # -- django-allauth provider configuration serialized as JSON.
   oidcProviders: null
 
@@ -141,6 +166,8 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+# -- Container resources. HPA utilization metrics require requests.cpu for CPU
+# (including Kubernetes' default CPU metric) and requests.memory for memory.
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
@@ -236,6 +263,7 @@ persistence:
 autoscaling:
   enabled: false
   minReplicas: 1
+  # -- Must be greater than or equal to autoscaling.minReplicas.
   maxReplicas: 100
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
@@ -301,25 +329,56 @@ grafana:
 
 postgresql:
   enabled: true
+  # -- Non-sensitive rollout revision for bundled PostgreSQL credentials.
+  # Increment this value whenever the effective credentials are rotated. Never
+  # put a password or password hash here.
+  credentialsRevision: 0
   image:
     repository: bitnamilegacy/postgresql
     digest: "sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d"
   auth:
+    # -- Database created for Paperless by the bundled PostgreSQL dependency.
     database: paperless
+    # -- User created for Paperless by the bundled PostgreSQL dependency.
     username: paperless
-    password: paperless
-    postgresPassword: supersecureadminpassword
+    # -- Password for the bundled Paperless database user. Empty generates a
+    # random value that Bitnami preserves from its existing Secret on upgrades.
+    password: ""
+    # -- Bundled PostgreSQL administrator password. Empty generates a random,
+    # upgrade-stable value.
+    postgresPassword: ""
+    # -- Existing Secret managed outside this chart. When set, it must contain
+    # the keys configured below and neither password value is used.
+    existingSecret: ""
+    secretKeys:
+      # -- Administrator password key in postgresql.auth.existingSecret.
+      adminPasswordKey: postgres-password
+      # -- Paperless database-user password key in postgresql.auth.existingSecret.
+      userPasswordKey: password
+      # -- Replication password key in postgresql.auth.existingSecret.
+      replicationPasswordKey: replication-password
 
 valkey:
   internal: true
   # -- Database ID for non-default database
   dbid: 0
 
+  auth:
+    # -- Authentication is unsupported for the bundled broker. Disable the
+    # bundled broker and configure config.redis.existingSecret for auth.
+    enabled: false
+
+  tls:
+    # -- TLS is unsupported for the bundled broker. Disable the bundled broker
+    # and configure a rediss:// URL through config.redis.existingSecret.
+    enabled: false
+
   service:
+    # -- Internal Valkey service port. The bundled chart currently requires 6379.
     port: 6379
 
   image:
-    tag: "9.0.2@sha256:930b41430fb727f533c5982fe509b6f04233e26d0f7354e04de4b0d5c706e44e"
+    tag: "9.0.5@sha256:0381fe6dfb72c73580a43b0510a6b31909a9650ac6c7e4946cf75c074a658357"
 
   dataStorage:
     className: ""

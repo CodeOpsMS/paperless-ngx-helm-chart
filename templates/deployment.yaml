@@ -1,6 +1,7 @@
 ---
 {{- $fullname := include "paperless-ngx.fullname" . }}
-{{- $hasStructuredEnv := or .Values.config.secretKey.existingSecret.name .Values.config.database.existingSecret.name (and (not .Values.valkey.internal) .Values.config.redis.existingSecret.name) -}}
+{{- $isSQLite := eq .Values.config.database.engine "sqlite" -}}
+{{- $hasStructuredEnv := or .Values.postgresql.enabled .Values.config.secretKey.existingSecret.name (and (not $isSQLite) .Values.config.database.existingSecret.name) (and (not .Values.valkey.internal) .Values.config.redis.existingSecret.name) -}}
 {{- range $value := .Values.env -}}
 {{- if kindIs "map" $value -}}
 {{- $hasStructuredEnv = true -}}
@@ -16,6 +17,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
@@ -27,13 +29,15 @@ spec:
   template:
     metadata:
       annotations:
-        "checksum/config": {{ toYaml .Values.config | sha256sum }}
-        "checksum/env": {{ toYaml .Values.env | sha256sum }}
+        "paperless-ngx.codeopsms.de/secret-revision": {{ .Values.config.secretRevision | quote }}
+        "checksum/postgresql": {{ include "paperless-ngx.postgresqlConnectionChecksum" . }}
+        "checksum/valkey": {{ include "paperless-ngx.valkeyConnectionChecksum" . }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
         {{- include "paperless-ngx.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -43,6 +47,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "paperless-ngx.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -77,7 +82,13 @@ spec:
                   name: {{ .Values.config.secretKey.existingSecret.name | quote }}
                   key: {{ .Values.config.secretKey.existingSecret.key | quote }}
             {{- end }}
-            {{- if .Values.config.database.existingSecret.name }}
+            {{- if .Values.postgresql.enabled }}
+            - name: PAPERLESS_DBPASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "paperless-ngx.postgresqlSecretName" . | quote }}
+                  key: {{ include "paperless-ngx.postgresqlUserPasswordKey" . | quote }}
+            {{- else if and (not $isSQLite) .Values.config.database.existingSecret.name }}
             - name: PAPERLESS_DBPASS
               valueFrom:
                 secretKeyRef:
