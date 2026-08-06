@@ -79,6 +79,12 @@ password only from the Secret file mounted in the PostgreSQL pod, and the test
 compares password fingerprints before and after the upgrade without printing
 the credential.
 
+The runner supplies explicit PostgreSQL and Valkey pod selectors to the exact
+0.3.23 package. This preserves active network isolation while avoiding that
+historical release's broken generated-egress fallback; the baseline archive is
+neither patched nor rebuilt. Current-chart default discovery remains covered by
+the dedicated render and unit tests.
+
 Unit and render tests also assert that no Deployment annotation is derived from
 database, broker, OIDC, or arbitrary environment Secret values. Rollouts for
 that Secret-backed configuration use the explicit, non-sensitive

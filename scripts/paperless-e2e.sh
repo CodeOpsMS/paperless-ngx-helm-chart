@@ -89,6 +89,31 @@ common_values=(
   --set-string postgresql.primary.persistence.size=2Gi
 )
 
+# The immutable 0.3.23 baseline loses the root Helm context in its generated
+# dependency-egress fallback. Supplying the equivalent explicit selectors keeps
+# NetworkPolicy active without modifying or rebuilding that released package.
+NETWORK_POLICY_DATABASE=$(jq -cn --arg release "$RELEASE" '
+  [
+    {
+      ports: [{port: 5432, protocol: "TCP"}],
+      to: [{podSelector: {matchLabels: {
+        "app.kubernetes.io/instance": $release,
+        "app.kubernetes.io/name": "postgresql"
+      }}}]
+    },
+    {
+      ports: [{port: 6379, protocol: "TCP"}],
+      to: [{podSelector: {matchLabels: {
+        "app.kubernetes.io/instance": $release,
+        "app.kubernetes.io/name": "valkey"
+      }}}]
+    }
+  ]
+')
+common_values+=(
+  --set-json "networkPolicy.egress.database=${NETWORK_POLICY_DATABASE}"
+)
+
 kube() {
   if [[ -n "$KUBE_CONTEXT" && "$KUBE_INSECURE_SKIP_TLS_VERIFY" == "true" ]]; then
     "$KUBECTL_BIN" --context "$KUBE_CONTEXT" --insecure-skip-tls-verify=true "$@"
