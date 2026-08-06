@@ -1,36 +1,45 @@
 name: Helm CI
 
 on:
-  pull_request:
-  workflow_dispatch:
+  pull_request: {}
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
-  lint-and-package:
-    name: Helm ${{ matrix.helm-version }}
+  static:
+    name: Static / Helm ${{ matrix.helm-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         helm-version:
           # renovate: datasource=github-releases depName=helm-v3 packageName=helm/helm versioning=semver
-          - v3.21.3
+          - &helm3 v3.21.3
           # renovate: datasource=github-releases depName=helm-v4 packageName=helm/helm versioning=semver
-          - v4.2.3
+          - &helm4 v4.2.3
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Check repository metadata
-        run: bash .github/scripts/check-repository-metadata.sh .
+        with:
+          fetch-depth: 0
 
       - name: Set up Helm
         uses: azure/setup-helm@v5
         with:
           version: ${{ matrix.helm-version }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.8.0
 
       - name: Configure chart repositories
         run: helm repo add valkey https://valkey.io/valkey-helm/
@@ -38,31 +47,316 @@ jobs:
       - name: Build dependencies
         run: helm dependency build .
 
-      - name: Lint chart
+      - name: Run chart-testing lint
+        run: ct lint --charts .
+
+      - name: Run direct strict lint
         run: helm lint --strict .
 
-      - name: Check chart icon
-        run: bash .github/scripts/check-chart-icon.sh .
+      - name: Install helm-unittest
+        run: |
+          plugin_args=(
+            https://github.com/helm-unittest/helm-unittest
+            --version v1.1.1
+          )
+          if [[ "${{ matrix.helm-version }}" == v4.* ]]; then
+            plugin_args+=(--verify=false)
+          fi
+          helm plugin install "${plugin_args[@]}"
 
-      - name: Render chart
-        run: >-
-          helm template ci-render .
-          --namespace paperless-ngx-ci
-          >/tmp/paperless-ngx-rendered.yaml
+      - name: Run chart unit tests
+        run: helm unittest --strict .
+
+      - name: Check repository metadata and stable icon
+        run: |
+          bash .github/scripts/check-repository-metadata.sh .
+          bash .github/scripts/check-chart-icon.sh .
+
+      - name: Verify generated README is current
+        if: startsWith(matrix.helm-version, 'v4.')
+        run: |
+          scripts/generate-readme.sh
+          git diff --exit-code -- README.md
+
+      - name: Render representative configurations
+        run: |
+          helm template ci-default . \
+            --namespace paperless-ngx-ci \
+            >/tmp/paperless-default.yaml
+          helm template ci-external . \
+            --namespace paperless-ngx-ci \
+            --set postgresql.enabled=false \
+            --set-string config.database.host=postgres.example.invalid \
+            --set-string config.database.existingSecret.name=database-secret \
+            --set valkey.internal=false \
+            --set-string config.redis.existingSecret.name=redis-secret \
+            --set-string config.secretKey.existingSecret.name=paperless-secret \
+            --set networkPolicy.enabled=true \
+            --set-json 'networkPolicy.egress.database=[{"to":[{"ipBlock":{"cidr":"10.0.0.0/8"}}],"ports":[{"protocol":"TCP","port":5432},{"protocol":"TCP","port":6379}]}]' \
+            --set autoscaling.enabled=true \
+            >/tmp/paperless-external.yaml
 
       - name: Verify internal dependency service discovery
         run: scripts/verify-internal-service-names.sh
 
-      - name: Package chart
+      - name: Verify invalid and Paperless 2 values are rejected
         run: |
-          set -euo pipefail
-          package_dir="$(mktemp -d)"
-          helm package . --destination "$package_dir"
-          chart_name="$(helm show chart . | awk '/^name:/ { print $2 }')"
-          chart_version="$(helm show chart . | awk '/^version:/ { print $2 }')"
-          package="$package_dir/${chart_name}-${chart_version}.tgz"
-          test -n "$chart_name"
-          test -n "$chart_version"
+          expect_failure() {
+            if "$@" >/tmp/expected-failure.log 2>&1; then
+              echo "Expected command to fail: $*"
+              exit 1
+            fi
+          }
+          expect_failure helm template invalid . --set config.database.pass=legacy
+          expect_failure helm template invalid . --set config.database.sslmode=require
+          expect_failure helm template invalid . --set env.PAPERLESS_CONSUMER_POLLING=10
+          expect_failure helm template invalid . --set env.PAPERLESS_CONSUMER_INOTIFY_DELAY=5
+          expect_failure helm template invalid . --set env.PAPERLESS_CONSUMER_POLLING_DELAY=5
+          expect_failure helm template invalid . --set env.PAPERLESS_CONSUMER_BARCODE_SCANNER=ZXING
+          expect_failure helm template invalid . --set env.PAPERLESS_OCR_MODE=skip
+          expect_failure helm template invalid . --set image.digest=invalid
+          expect_failure helm template invalid . --set tests.image.digest=invalid
+          expect_failure helm template invalid . --set valkey.internal=false
+          expect_failure helm template invalid . --set postgresql.enabled=false
+          expect_failure helm template invalid . \
+            --set networkPolicy.enabled=true \
+            --set postgresql.enabled=false \
+            --set-string config.database.host=postgres.example.invalid
+
+      - name: Verify image digests against registries
+        if: startsWith(matrix.helm-version, 'v4.')
+        run: scripts/verify-image-digests.sh
+
+      - name: Package and inspect chart
+        id: package
+        if: startsWith(matrix.helm-version, 'v4.')
+        run: |
+          mkdir -p .candidate
+          helm package . --destination .candidate
+          chart_version=$(helm show chart . | awk '/^version:/ { print $2 }')
+          package=".candidate/paperless-ngx-${chart_version}.tgz"
           test -s "$package"
-          helm show chart "$package" >/dev/null
           bash .github/scripts/check-chart-package.sh "$package"
+          echo "version=$chart_version" >>"$GITHUB_OUTPUT"
+          echo "path=$package" >>"$GITHUB_OUTPUT"
+
+      - name: Upload candidate chart
+        if: startsWith(matrix.helm-version, 'v4.')
+        uses: actions/upload-artifact@v6
+        with:
+          name: paperless-ngx-${{ steps.package.outputs.version }}-candidate
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+  representative-install:
+    name: Required install / Helm 4 / Kubernetes 1.36
+    runs-on: ubuntu-latest
+    needs: static
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: *helm4
+
+      - name: Create Kubernetes 1.36 cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: &kind-version v0.32.0
+          node_image: &kind136 kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+          wait: 120s
+
+      - name: Build candidate package
+        id: candidate
+        run: |
+          helm repo add valkey https://valkey.io/valkey-helm/
+          helm dependency build .
+          mkdir -p .candidate
+          helm package . --destination .candidate
+          chart_version=$(helm show chart . | awk '/^version:/ { print $2 }')
+          package=".candidate/paperless-ngx-${chart_version}.tgz"
+          test -s "$package"
+          echo "path=$package" >>"$GITHUB_OUTPUT"
+
+      - name: Validate rendered resources against Kubernetes API
+        run: |
+          helm template representative . \
+            --namespace paperless-representative \
+            --set postgresql.enabled=false \
+            --set-string config.database.host=postgres.example.invalid \
+            --set-string config.database.existingSecret.name=database-secret \
+            --set valkey.internal=false \
+            --set-string config.redis.url=redis://valkey.example.invalid:6379/0 \
+            >/tmp/paperless-representative.yaml
+          kubectl create namespace paperless-representative
+          kubectl apply --dry-run=server -f /tmp/paperless-representative.yaml
+
+      - name: Run fresh-install E2E
+        env:
+          NAMESPACE: paperless-representative
+          RELEASE: paperless-representative
+          CLEANUP_NAMESPACE: "false"
+          CANDIDATE_CHART: ${{ steps.candidate.outputs.path }}
+        run: scripts/paperless-e2e.sh fresh "$CANDIDATE_CHART"
+
+  full-fresh-matrix:
+    name: Full install / Helm ${{ matrix.helm-version }} / Kubernetes ${{ matrix.kubernetes }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      startsWith(github.head_ref, 'chore/update-paperless-ngx-')
+    runs-on: ubuntu-latest
+    needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - helm-version: *helm3
+            kubernetes: "1.34"
+            node_image: &kind134 kindest/node:v1.34.8@sha256:02722c2dedddcfc00febf5d27fbeb9b7b2c14294c82109ff4a85d89ac9ba3256
+          - helm-version: *helm3
+            kubernetes: "1.35"
+            node_image: &kind135 kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e940429c2ce42fa3a5619ec2bbc60b949c0ac95
+          - helm-version: *helm3
+            kubernetes: "1.36"
+            node_image: *kind136
+          - helm-version: *helm4
+            kubernetes: "1.34"
+            node_image: *kind134
+          - helm-version: *helm4
+            kubernetes: "1.35"
+            node_image: *kind135
+          - helm-version: *helm4
+            kubernetes: "1.36"
+            node_image: *kind136
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ matrix.helm-version }}
+
+      - name: Create Kubernetes cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: *kind-version
+          node_image: ${{ matrix.node_image }}
+          wait: 120s
+
+      - name: Build and install candidate
+        env:
+          NAMESPACE: paperless-fresh
+          RELEASE: paperless-fresh
+        run: |
+          helm repo add valkey https://valkey.io/valkey-helm/
+          helm dependency build .
+          mkdir -p .candidate
+          helm package . --destination .candidate
+          chart_version=$(helm show chart . | awk '/^version:/ { print $2 }')
+          package=".candidate/paperless-ngx-${chart_version}.tgz"
+          test -s "$package"
+          scripts/paperless-e2e.sh fresh "$package"
+
+  full-upgrade-matrix:
+    name: Upgrade / ${{ matrix.name }} / Kubernetes ${{ matrix.kubernetes }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      startsWith(github.head_ref, 'chore/update-paperless-ngx-')
+    runs-on: ubuntu-latest
+    needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Helm 3 to Helm 3
+            base_helm: *helm3
+            upgrade_helm: *helm3
+            kubernetes: "1.34"
+            node_image: *kind134
+          - name: Helm 3 to Helm 4
+            base_helm: *helm3
+            upgrade_helm: *helm4
+            kubernetes: "1.35"
+            node_image: *kind135
+          - name: Helm 4 to Helm 4
+            base_helm: *helm4
+            upgrade_helm: *helm4
+            kubernetes: "1.36"
+            node_image: *kind136
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up baseline Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ matrix.base_helm }}
+
+      - name: Preserve baseline Helm binary
+        run: cp "$(command -v helm)" /tmp/helm-base
+
+      - name: Set up upgrade Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ matrix.upgrade_helm }}
+
+      - name: Preserve upgrade Helm binary
+        run: cp "$(command -v helm)" /tmp/helm-upgrade
+
+      - name: Create Kubernetes cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: *kind-version
+          node_image: ${{ matrix.node_image }}
+          wait: 120s
+
+      - name: Package 0.3.23 baseline and current candidate
+        id: candidate
+        run: |
+          helm repo add valkey https://valkey.io/valkey-helm/
+          helm dependency build .
+          mkdir -p .candidate
+          helm package . --destination .candidate
+
+          baseline_commit=
+          while IFS= read -r commit; do
+            baseline_version=$(git show "${commit}:Chart.yaml" 2>/dev/null \
+              | awk '/^version:/ { gsub(/"/, "", $2); print $2 }')
+            if [[ "$baseline_version" == "0.3.23" ]]; then
+              baseline_commit=$commit
+              break
+            fi
+          done < <(git rev-list --topo-order HEAD)
+          test -n "$baseline_commit"
+          test "$(git show "${baseline_commit}:Chart.yaml" | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2 }')" = "2.20.15"
+          baseline_dir=$(mktemp -d)
+          git worktree add --detach "$baseline_dir" "$baseline_commit"
+          /tmp/helm-base repo add valkey https://valkey.io/valkey-helm/
+          /tmp/helm-base dependency build "$baseline_dir"
+          /tmp/helm-base package "$baseline_dir" --destination .candidate
+          git worktree remove --force "$baseline_dir"
+
+          candidate_version=$(helm show chart . | awk '/^version:/ { print $2 }')
+          candidate_package=".candidate/paperless-ngx-${candidate_version}.tgz"
+          test -s .candidate/paperless-ngx-0.3.23.tgz
+          test -s "$candidate_package"
+          echo "path=$candidate_package" >>"$GITHUB_OUTPUT"
+
+      - name: Run Paperless 2 to 3 upgrade E2E
+        env:
+          BASE_CHART_PACKAGE: .candidate/paperless-ngx-0.3.23.tgz
+          BASE_HELM_BIN: /tmp/helm-base
+          HELM_BIN: /tmp/helm-upgrade
+          NAMESPACE: paperless-upgrade
+          RELEASE: paperless-upgrade
+          CANDIDATE_CHART: ${{ steps.candidate.outputs.path }}
+        run: scripts/paperless-e2e.sh upgrade "$CANDIDATE_CHART"

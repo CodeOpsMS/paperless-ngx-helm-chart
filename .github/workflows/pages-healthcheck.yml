@@ -72,6 +72,11 @@ jobs:
           helm pull paperless/paperless-ngx --version "$published_version"
           bash .github/scripts/check-chart-package.sh "$chart_package"
           bash .github/scripts/check-chart-icon.sh "$chart_package"
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          helm show chart "oci://ghcr.io/${owner}/helm-charts/paperless-ngx" \
+            --version "$published_version" \
+            >/tmp/paperless-oci-metadata.yaml
+          grep -q "^version: ${published_version}$" /tmp/paperless-oci-metadata.yaml
           curl --fail --silent --show-error --location --retry 3 \
             --output /dev/null "$asset_url"
         env:

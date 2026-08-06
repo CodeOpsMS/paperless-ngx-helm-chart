@@ -24,14 +24,14 @@ image:
   # -- image tag - Overrides the image tag whose default is the chart appVersion.
   tag: ""
   # -- Immutable multi-platform image digest. When set, it overrides the tag.
-  digest: "sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f"
+  digest: "sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b"
 
 
 serviceAccount:
   # -- Specifies whether a service account should be created
   create: true
   # -- Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  automount: false
   # -- Annotations to add to the service account
   annotations: {}
   # -- The name of the service account to use.
@@ -60,37 +60,59 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
+strategy:
+  # -- Deployment strategy. RollingUpdate preserves the existing scaling behavior.
+  type: RollingUpdate
+
+# -- Grace period for Paperless workers to stop cleanly.
+terminationGracePeriodSeconds: 60
+
 config:
-  # -- default first ingress host
-  url:
-  apps:
+  # -- Public Paperless URL. Empty derives the URL from the first ingress host.
+  url: ""
+  # -- Additional Django applications.
+  apps: ""
+  secretKey:
+    existingSecret:
+      # -- Existing Secret containing PAPERLESS_SECRET_KEY. Empty uses a generated, upgrade-stable key.
+      name: ""
+      # -- Key in the existing Secret.
+      key: "PAPERLESS_SECRET_KEY"
   redis:
+    # -- External Redis-compatible broker URL when valkey.internal is false.
     url: ""
     prefix: ""
+    existingSecret:
+      # -- Existing Secret containing the external broker URL.
+      name: ""
+      # -- Key in the existing Secret.
+      urlKey: "url"
   database:
     engine: "postgresql"
     host: ""
     port: 5432
     name: "paperless"
     user: "paperless"
-    # -- password to access database (has no effect if existingSecret.name is set)
-    pass: "paperless"
+    # -- Database password. Ignored when config.database.existingSecret.name is set.
+    password: "paperless"
     existingSecret:
-      # -- if set it use external secret for connect to database
+      # -- Existing Secret containing the database password.
       name: ""
-      # -- configurate key of secret where the password of database use is set
-      passKey: "password"
-    sslmode: "prefer"
-  oidcProviders:
+      # -- Key in the existing Secret.
+      passwordKey: "password"
+    # -- Paperless 3 database options, for example sslmode=require,pool.max_size=5.
+    options: "sslmode=prefer"
+  # -- django-allauth provider configuration serialized as JSON.
+  oidcProviders: null
 
 env:
   # -- correct ip-address by X-Forwarded-For (example value for env)
   PAPERLESS_USE_X_FORWARD_HOST: true
   # -- start service for monitor background jobs e.g. for prometheus (example value for env)
   PAPERLESS_ENABLE_FLOWER: true
-  # -- example to use valuesFrom
+  # -- Example using a Kubernetes EnvVar source.
   # PAPERLESS_TEST:
-  #   valuesFrom:
+  #   valueFrom:
   #     secretKeyRef:
   #       name: "secret"
   #       key: "key"
@@ -131,15 +153,28 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+# Paperless 3 may need substantial time for database migrations and the first
+# Tantivy index build. The startup probe permits 30 minutes before liveness starts.
 livenessProbe:
-  httpGet:
-    path: /
-    port: http
+  enabled: true
+  path: /
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
 readinessProbe:
-  httpGet:
-    path: /
-    port: http
+  enabled: true
+  path: /
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 6
+startupProbe:
+  enabled: true
+  path: /
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 180
 
 networkPolicy:
   # -- deploy networkpolicy
@@ -166,7 +201,7 @@ networkPolicy:
         podSelector:
           matchLabels:
             k8s-app: kube-dns
-    # -- rule to access Database (e.g. postgresql, redis)
+    # -- Rules for external PostgreSQL/Redis-compatible services. Required when an internal dependency is disabled.
     # @section -- NetworkPolicy
     database: []
     # -- allow additinal  egress (e.g. smtp, imap)
@@ -175,6 +210,8 @@ networkPolicy:
 
 persistence:
   enabled: true
+  # -- Retain chart-managed Paperless data when the Helm release is uninstalled.
+  retain: true
   annotations: {}
   # -- Persistent Volume Storage Class
   # If defined, storageClassName: <storageClass>
@@ -222,6 +259,22 @@ tolerations: []
 
 affinity: {}
 
+tests:
+  # -- Enable the Helm connectivity test pod.
+  enabled: true
+  image:
+    repository: busybox
+    tag: "1.38.0"
+    digest: "sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      cpu: 100m
+      memory: 32Mi
+
 
 prometheus:
   servicemonitor:
@@ -250,6 +303,7 @@ postgresql:
   enabled: true
   image:
     repository: bitnamilegacy/postgresql
+    digest: "sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d"
   auth:
     database: paperless
     username: paperless
@@ -263,6 +317,9 @@ valkey:
 
   service:
     port: 6379
+
+  image:
+    tag: "9.0.2@sha256:930b41430fb727f533c5982fe509b6f04233e26d0f7354e04de4b0d5c706e44e"
 
   dataStorage:
     className: ""

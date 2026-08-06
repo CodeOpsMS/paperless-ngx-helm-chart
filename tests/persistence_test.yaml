@@ -1,0 +1,27 @@
+suite: Paperless persistence
+templates:
+  - templates/pvc.yaml
+tests:
+  - it: retains the chart-managed PVC by default
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+
+  - it: can explicitly make the chart-managed PVC removable
+    set:
+      persistence.retain: false
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/resource-policy"]
+
+  - it: does not create a PVC for an existing claim
+    set:
+      persistence.existingClaim: existing-paperless-data
+    asserts:
+      - hasDocuments:
+          count: 0
+

@@ -4,11 +4,12 @@ description: >-
   A community Helm chart for Paperless-ngx, a document management system
   that transforms physical documents into a searchable online archive.
 type: application
+kubeVersion: ">=1.34.0-0"
 icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.3.23"
+version: "0.4.0"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
-appVersion: "2.20.15"
+appVersion: "3.0.5"
 keywords:
   - paperless
   - paperless-ng
@@ -24,6 +25,23 @@ sources:
   - https://github.com/paperless-ngx/paperless-ngx
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 annotations:
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/changes: |
+    - kind: changed
+      description: Upgrade Paperless-ngx from 2.20.15 to 3.0.5
+    - kind: added
+      description: Add strict values validation, immutable image pins, and Paperless 3 upgrade guidance
+    - kind: fixed
+      description: Use a stable upstream icon URL and migration-safe startup probes
+  artifacthub.io/images: |
+    - name: Paperless-ngx
+      image: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
+    - name: PostgreSQL
+      image: docker.io/bitnamilegacy/postgresql@sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d
+    - name: Valkey
+      image: docker.io/valkey/valkey:9.0.2@sha256:930b41430fb727f533c5982fe509b6f04233e26d0f7354e04de4b0d5c706e44e
+    - name: Helm test
+      image: docker.io/library/busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
   artifacthub.io/links: |
     - name: Chart source
       url: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
@@ -33,7 +51,7 @@ annotations:
       url: https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 dependencies:
   - name: postgresql
-    version: "^16.5.6"
+    version: "16.7.27"
     repository: "oci://docker.io/bitnamicharts"
     condition: postgresql.enabled
   - name: valkey

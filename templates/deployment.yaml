@@ -1,5 +1,11 @@
 ---
 {{- $fullname := include "paperless-ngx.fullname" . }}
+{{- $hasStructuredEnv := or .Values.config.secretKey.existingSecret.name .Values.config.database.existingSecret.name (and (not .Values.valkey.internal) .Values.config.redis.existingSecret.name) -}}
+{{- range $value := .Values.env -}}
+{{- if kindIs "map" $value -}}
+{{- $hasStructuredEnv = true -}}
+{{- end -}}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,6 +19,8 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "paperless-ngx.selectorLabels" . | nindent 6 }}
@@ -39,6 +47,7 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       containers:
         - name: {{ .Chart.Name }}
           {{- with .Values.securityContext }}
@@ -59,29 +68,64 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ $fullname }}
+          {{- if $hasStructuredEnv }}
           env:
-            {{- with .Values.config.database.existingSecret }}
-            {{- if .name }}
+            {{- if .Values.config.secretKey.existingSecret.name }}
+            - name: PAPERLESS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.secretKey.existingSecret.name | quote }}
+                  key: {{ .Values.config.secretKey.existingSecret.key | quote }}
+            {{- end }}
+            {{- if .Values.config.database.existingSecret.name }}
             - name: PAPERLESS_DBPASS
               valueFrom:
                 secretKeyRef:
-                  name: {{ .name }}
-                  key: {{ .passKey }}
+                  name: {{ .Values.config.database.existingSecret.name | quote }}
+                  key: {{ .Values.config.database.existingSecret.passwordKey | quote }}
             {{- end }}
-            {{- end }}{{/* end-with config.database.existingSecret */}}
+            {{- if and (not .Values.valkey.internal) .Values.config.redis.existingSecret.name }}
+            - name: PAPERLESS_REDIS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.redis.existingSecret.name | quote }}
+                  key: {{ .Values.config.redis.existingSecret.urlKey | quote }}
+            {{- end }}
             {{- range $name, $value := .Values.env }}
             {{- if (kindIs "map" $value) }}
             - name: {{ $name | quote }}
               {{- toYaml $value | nindent 14 }}
             {{- end }}
             {{- end }}
-          {{- with .Values.livenessProbe }}
-          livenessProbe:
-            {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.readinessProbe }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
           readinessProbe:
-            {{- toYaml . | nindent 12 }}
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.startupProbe.path }}
+              port: http
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
           {{- end }}
           {{- with .Values.resources }}
           resources:

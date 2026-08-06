@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -79,7 +80,7 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             if ! git diff --quiet "$tag" -- \
               .helmignore Chart.yaml Chart.lock LICENSES NOTICE README.md \
-              templates values.yaml; then
+              UPGRADE-0.4.md templates values.schema.json values.yaml; then
               echo "Chart content changed without a chart version bump."
               echo "Increase version in Chart.yaml before publishing."
               exit 1
@@ -93,8 +94,28 @@ jobs:
             gh release create "$tag" "$CHART_PACKAGE" \
               --target "$GITHUB_SHA" \
               --title "$tag" \
-              --notes "Helm chart release ${CHART_VERSION} for Paperless-ngx."
+              --notes "Helm chart release ${CHART_VERSION} for Paperless-ngx. Read UPGRADE-0.4.md before upgrading from chart 0.3.x."
           fi
+
+      - name: Publish chart to GHCR as OCI
+        env:
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner=$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          repository="oci://ghcr.io/${owner}/helm-charts/paperless-ngx"
+
+          if helm show chart "$repository" --version "$CHART_VERSION" >/dev/null 2>&1; then
+            echo "paperless-ngx ${CHART_VERSION} already exists in GHCR; skipping OCI push"
+            exit 0
+          fi
+
+          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io \
+            --username "$GITHUB_ACTOR" \
+            --password-stdin
+          helm push "$CHART_PACKAGE" "oci://ghcr.io/${owner}/helm-charts"
 
       - name: Publish Helm repository to gh-pages
         env:

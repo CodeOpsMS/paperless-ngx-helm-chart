@@ -8,9 +8,12 @@
 .mailmap
 .github/
 .release-packages/
+_docs.gotmpl
 artifacthub-repo.yml
 renovate.json
+TESTING.md
 scripts/
+tests/*_test.yaml
 .bzr/
 .bzrignore
 .hg/

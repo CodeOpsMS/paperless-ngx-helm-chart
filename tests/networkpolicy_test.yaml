@@ -1,0 +1,45 @@
+suite: Paperless network policy
+templates:
+  - templates/networkpolicy.yaml
+tests:
+  - it: permits the internal PostgreSQL and Valkey pods for this release
+    release:
+      name: paperless-netpol
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/instance"]
+          value: paperless-netpol
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: postgresql
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+
+  - it: uses explicit rules and omits internal selectors for external services
+    set:
+      networkPolicy:
+        enabled: true
+        egress:
+          database:
+            - ports:
+                - port: 5432
+                  protocol: TCP
+                - port: 6379
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 10.0.0.0/8
+      postgresql.enabled: false
+      config.database.host: postgres.example.invalid
+      valkey.internal: false
+      config.redis.url: redis://valkey.example.invalid:6379/0
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+      - equal:
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 10.0.0.0/8

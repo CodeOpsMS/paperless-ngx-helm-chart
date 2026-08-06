@@ -19,6 +19,15 @@ over the mutable tag while retaining the configured registry and repository.
 {{- end -}}
 {{- end }}
 
+{{/* Build the immutable Helm test image reference. */}}
+{{- define "paperless-ngx.testImage" -}}
+{{- if .Values.tests.image.digest -}}
+{{- printf "%s:%s@%s" .Values.tests.image.repository .Values.tests.image.tag .Values.tests.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.tests.image.repository .Values.tests.image.tag -}}
+{{- end -}}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).

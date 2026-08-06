@@ -142,10 +142,23 @@ jobs:
           sed -i "s/^version: .*/version: \"${new_chart_version}\"/" Chart.yaml
           sed -i "s/^appVersion: .*/appVersion: \"${NEW_APP_VERSION}\"/" Chart.yaml
           sed -i "0,/^  digest: .*/s//  digest: \"${NEW_IMAGE_DIGEST}\"/" values.yaml
+          sed -i \
+            "s|image: ghcr.io/paperless-ngx/paperless-ngx@${OLD_IMAGE_DIGEST}|image: ghcr.io/paperless-ngx/paperless-ngx@${NEW_IMAGE_DIGEST}|" \
+            Chart.yaml
+          sed -i \
+            "s/${OLD_IMAGE_DIGEST}/${NEW_IMAGE_DIGEST}/g; s/${OLD_APP_VERSION}/${NEW_APP_VERSION}/g" \
+            tests/deployment_test.yaml
+          sed -i "s/${OLD_APP_VERSION}/${NEW_APP_VERSION}/g" \
+            Chart.yaml UPGRADE-0.4.md TESTING.md
+          sed -i "s/${current_chart_version}/${new_chart_version}/g" \
+            _docs.gotmpl UPGRADE-0.4.md TESTING.md
+
+          scripts/generate-readme.sh
 
           grep -q "^version: \"${new_chart_version}\"$" Chart.yaml
           grep -q "^appVersion: \"${NEW_APP_VERSION}\"$" Chart.yaml
           grep -q "^  digest: \"${NEW_IMAGE_DIGEST}\"$" values.yaml
+          grep -q "image: ghcr.io/paperless-ngx/paperless-ngx@${NEW_IMAGE_DIGEST}" Chart.yaml
           grep -q '^icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg$' Chart.yaml
 
           echo "NEW_CHART_VERSION=$new_chart_version" >>"$GITHUB_ENV"

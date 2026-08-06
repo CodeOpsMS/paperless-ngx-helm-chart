@@ -45,22 +45,25 @@ spec:
     {{- end }}
     {{- with .database }}
     {{- toYaml . | nindent 4 }}
-    {{- else }}
+    {{- end }}
+    {{- if $.Values.postgresql.enabled }}
     - ports:
         - port: 5432
           protocol: TCP
       to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/instance: {{ $.Release.Name }}
               app.kubernetes.io/name: postgresql
+    {{- end }}
+    {{- if $.Values.valkey.internal }}
     - ports:
         - port: 6379
           protocol: TCP
       to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/instance: {{ $.Release.Name }}
               app.kubernetes.io/name: valkey
     {{- end }}
     {{- with .extra }}

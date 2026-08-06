@@ -1,0 +1,95 @@
+suite: Paperless deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: pins the Paperless 3 image by digest
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-paperless-ngx
+
+  - it: falls back to appVersion when the digest and tag are empty
+    set:
+      image.digest: ""
+      image.tag: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/paperless-ngx/paperless-ngx:3.0.5
+
+  - it: allows thirty minutes for migrations and Tantivy indexing
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 180
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /
+
+  - it: preserves the existing scaling and RollingUpdate interface
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+
+  - it: maps all supported external secrets to Kubernetes EnvVars
+    set:
+      config.secretKey.existingSecret.name: paperless-secret
+      config.database.existingSecret.name: database-secret
+      valkey.internal: false
+      postgresql.enabled: false
+      config.database.host: postgres.example
+      config.redis.existingSecret.name: redis-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: PAPERLESS_SECRET_KEY
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: paperless-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: PAPERLESS_DBPASS
+      - equal:
+          path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name
+          value: database-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[2].name
+          value: PAPERLESS_REDIS
+      - equal:
+          path: spec.template.spec.containers[0].env[2].valueFrom.secretKeyRef.name
+          value: redis-secret
+
+  - it: supports valueFrom for additional Paperless settings
+    set:
+      env:
+        PAPERLESS_EMAIL_HOST_PASSWORD:
+          valueFrom:
+            secretKeyRef:
+              name: smtp-secret
+              key: password
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: PAPERLESS_EMAIL_HOST_PASSWORD
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: smtp-secret
+
