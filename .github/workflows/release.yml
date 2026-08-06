@@ -1,30 +1,42 @@
 name: Release Helm Chart
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - Helm CI
     branches:
       - main
-  workflow_dispatch:
+    types:
+      - completed
 
 concurrency:
   group: release-helm-chart
   cancel-in-progress: false
+  queue: max
 
 permissions:
+  actions: read
   contents: write
+  packages: write
 
 jobs:
   release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           # renovate: datasource=github-releases depName=helm-v4 packageName=helm/helm versioning=semver
           version: v4.2.3
@@ -34,38 +46,150 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Resolve tested candidate from Helm CI
+        id: candidate-artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESTED_RUN_ID: ${{ github.event.workflow_run.id }}
+          TESTED_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: >-
+          .github/scripts/resolve-candidate-artifact.sh
+          "$TESTED_RUN_ID" "$TESTED_RUN_ATTEMPT"
+
+      - name: Download tested candidate from Helm CI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.candidate-artifact.outputs.id }}
+          path: .release-packages
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
       - name: Check repository metadata
         run: bash .github/scripts/check-repository-metadata.sh .
 
-      - name: Validate and package chart
+      - name: Validate immutable candidate
         id: chart
         run: |
           set -euo pipefail
-          helm repo add valkey https://valkey.io/valkey-helm/
-          helm dependency build .
-          helm lint --strict .
-          bash .github/scripts/check-chart-icon.sh .
-          helm template release-validation . \
-            --namespace paperless-ngx-release \
-            >/tmp/paperless-ngx-rendered.yaml
-
-          mkdir -p .release-packages
-          helm package . --destination .release-packages
-
-          chart_name="$(helm show chart . | awk '/^name:/ { print $2 }')"
-          chart_version="$(helm show chart . | awk '/^version:/ { print $2 }')"
-          package=".release-packages/${chart_name}-${chart_version}.tgz"
-          if [[ -z "$chart_name" || -z "$chart_version" || ! -s "$package" ]]; then
-            echo "::error::Expected chart package not found: $package"
+          packages=(.release-packages/paperless-ngx-*.tgz)
+          if [[ "${#packages[@]}" -ne 1 || ! -s "${packages[0]}" ]]; then
+            echo "::error::Expected exactly one tested chart package"
             exit 1
           fi
+          package=${packages[0]}
+          chart_name="$(helm show chart "$package" | awk '/^name:/ { print $2; exit }')"
+          chart_version="$(helm show chart "$package" | awk '/^version:/ { print $2; exit }')"
+          app_version="$(helm show chart "$package" | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2; exit }')"
+          source_name="$(helm show chart . | awk '/^name:/ { print $2; exit }')"
+          source_version="$(helm show chart . | awk '/^version:/ { print $2; exit }')"
+          source_app_version="$(helm show chart . | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2; exit }')"
+          test "$chart_name" = "$source_name"
+          test "$chart_version" = "$source_version"
+          test "$app_version" = "$source_app_version"
+
+          helm lint --strict "$package"
+          helm template release-validation "$package" \
+            --namespace paperless-ngx-release \
+            >/tmp/paperless-ngx-rendered.yaml
           bash .github/scripts/check-chart-package.sh "$package"
+          bash .github/scripts/check-chart-icon.sh "$package"
+          package_sha=$(sha256sum "$package" | awk '{ print $1 }')
+          echo "Promoting tested candidate SHA-256: ${package_sha}"
 
           echo "name=$chart_name" >>"$GITHUB_OUTPUT"
           echo "version=$chart_version" >>"$GITHUB_OUTPUT"
           echo "package=$package" >>"$GITHUB_OUTPUT"
+          echo "sha256=$package_sha" >>"$GITHUB_OUTPUT"
 
-      - name: Create GitHub release
+      - name: Prepare verified GitHub release draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_NAME: ${{ steps.chart.outputs.name }}
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          tag="${CHART_NAME}-${CHART_VERSION}"
+          release_metadata=$(mktemp)
+          release_dir=$(mktemp -d)
+          cleanup() {
+            rm -f "$release_metadata"
+            rm -rf "$release_dir"
+          }
+          trap cleanup EXIT
+
+          git fetch --tags --force
+          if gh release view "$tag" --json assets,isDraft,targetCommitish \
+            >"$release_metadata" 2>/dev/null; then
+            is_draft=$(jq -r '.isDraft' "$release_metadata")
+            target_commitish=$(jq -r '.targetCommitish' "$release_metadata")
+          else
+            if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+              echo "::error::Git tag ${tag} already exists without a GitHub release"
+              exit 1
+            fi
+            gh release create "$tag" \
+              --draft \
+              --target "$SOURCE_SHA" \
+              --title "$tag" \
+              --notes "Helm chart release ${CHART_VERSION} for Paperless-ngx. Read UPGRADE-0.4.md before upgrading from chart 0.3.x."
+            gh release view "$tag" --json assets,isDraft,targetCommitish \
+              >"$release_metadata"
+            is_draft=$(jq -r '.isDraft' "$release_metadata")
+            target_commitish=$(jq -r '.targetCommitish' "$release_metadata")
+          fi
+
+          asset_name="${CHART_NAME}-${CHART_VERSION}.tgz"
+          if [[ "$is_draft" == "true" ]]; then
+            if [[ "$target_commitish" != "$SOURCE_SHA" ]]; then
+              echo "::error::Existing draft targets ${target_commitish}, expected ${SOURCE_SHA}"
+              exit 1
+            fi
+
+            unexpected_assets=$(jq \
+              --arg expected "$asset_name" \
+              '[.assets[] | select(.name != $expected)] | length' \
+              "$release_metadata")
+            expected_assets=$(jq \
+              --arg expected "$asset_name" \
+              '[.assets[] | select(.name == $expected)] | length' \
+              "$release_metadata")
+            if [[ "$unexpected_assets" -ne 0 || "$expected_assets" -gt 1 ]]; then
+              echo "::error::Draft release contains unexpected or duplicate assets"
+              jq -r '.assets[].name' "$release_metadata"
+              exit 1
+            fi
+            if [[ "$expected_assets" -eq 0 ]]; then
+              gh release upload "$tag" "$CHART_PACKAGE"
+            fi
+          else
+            if ! git rev-parse --verify --quiet "${tag}^{commit}" >/dev/null; then
+              echo "::error::Published release ${tag} has no matching Git tag"
+              exit 1
+            fi
+            if ! git diff --quiet "$tag" -- \
+              .helmignore Chart.yaml Chart.lock LICENSES NOTICE README.md \
+              UPGRADE-0.4.md templates values.schema.json values.yaml; then
+              echo "Chart content changed without a chart version bump."
+              echo "Increase version in Chart.yaml before publishing."
+              exit 1
+            fi
+          fi
+
+          expected_sha=$(sha256sum "$CHART_PACKAGE" | awk '{ print $1 }')
+          gh release download "$tag" \
+            --pattern "$asset_name" \
+            --dir "$release_dir"
+          release_sha=$(sha256sum "$release_dir/$asset_name" | awk '{ print $1 }')
+          if [[ "$release_sha" != "$expected_sha" ]]; then
+            echo "::error::Existing GitHub release differs from the tested candidate"
+            echo "candidate=${expected_sha}"
+            echo "release=${release_sha}"
+            exit 1
+          fi
+
+      - name: Verify GitHub draft or release asset integrity
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHART_NAME: ${{ steps.chart.outputs.name }}
@@ -74,33 +198,136 @@ jobs:
         run: |
           set -euo pipefail
           tag="${CHART_NAME}-${CHART_VERSION}"
+          expected_sha=$(sha256sum "$CHART_PACKAGE" | awk '{ print $1 }')
+          release_dir=$(mktemp -d)
+          trap 'rm -rf "$release_dir"' EXIT
 
-          git fetch --tags --force
-          if gh release view "$tag" >/dev/null 2>&1; then
-            if ! git diff --quiet "$tag" -- \
-              .helmignore Chart.yaml Chart.lock LICENSES NOTICE README.md \
-              templates values.yaml; then
-              echo "Chart content changed without a chart version bump."
-              echo "Increase version in Chart.yaml before publishing."
+          gh release download "$tag" \
+            --pattern "${CHART_NAME}-${CHART_VERSION}.tgz" \
+            --dir "$release_dir"
+          release_package="${release_dir}/${CHART_NAME}-${CHART_VERSION}.tgz"
+          release_sha=$(sha256sum "$release_package" | awk '{ print $1 }')
+
+          if [[ "$release_sha" != "$expected_sha" ]]; then
+            echo "::error::GitHub release asset differs from the canonical chart package"
+            echo "expected=${expected_sha}"
+            echo "release=${release_sha}"
+            exit 1
+          fi
+          echo "Verified GitHub release asset SHA-256: ${release_sha}"
+
+      - name: Publish chart to GHCR as OCI
+        env:
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner=$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          repository="oci://ghcr.io/${owner}/helm-charts/paperless-ngx"
+          expected_sha=$(sha256sum "$CHART_PACKAGE" | awk '{ print $1 }')
+          existing_dir=$(mktemp -d)
+          anonymous_dir=$(mktemp -d)
+          pull_log=$(mktemp)
+          cleanup() {
+            helm registry logout ghcr.io >/dev/null 2>&1 || true
+            rm -rf "$existing_dir" "$anonymous_dir"
+            rm -f "$pull_log"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io \
+            --username "$GITHUB_ACTOR" \
+            --password-stdin
+
+          existing_pulled=false
+          for attempt in $(seq 1 3); do
+            rm -f "${existing_dir}/paperless-ngx-${CHART_VERSION}.tgz"
+            if helm pull "$repository" \
+              --version "$CHART_VERSION" \
+              --destination "$existing_dir" >"$pull_log" 2>&1; then
+              existing_pulled=true
+              break
+            fi
+            echo "Authenticated OCI pull failed (attempt ${attempt}/3)"
+            cat "$pull_log"
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep 10
+            fi
+          done
+
+          if [[ "$existing_pulled" == true ]]; then
+            existing_package="${existing_dir}/paperless-ngx-${CHART_VERSION}.tgz"
+            existing_sha=$(sha256sum "$existing_package" | awk '{ print $1 }')
+            if [[ "$existing_sha" != "$expected_sha" ]]; then
+              echo "::error::Immutable OCI version ${CHART_VERSION} differs from the GitHub release asset"
+              echo "release=${expected_sha}"
+              echo "oci=${existing_sha}"
               exit 1
             fi
-
-            rm -f "$CHART_PACKAGE"
-            gh release download "$tag" \
-              --pattern "${CHART_NAME}-${CHART_VERSION}.tgz" \
-              --dir .release-packages
+            echo "paperless-ngx ${CHART_VERSION} already exists in GHCR with the expected SHA-256"
           else
-            gh release create "$tag" "$CHART_PACKAGE" \
-              --target "$GITHUB_SHA" \
-              --title "$tag" \
-              --notes "Helm chart release ${CHART_VERSION} for Paperless-ngx."
+            owner_type=$(gh api "/users/${GITHUB_REPOSITORY_OWNER}" --jq '.type')
+            case "$owner_type" in
+              Organization)
+                package_owner_path="orgs/${GITHUB_REPOSITORY_OWNER}"
+                ;;
+              User)
+                package_owner_path="users/${GITHUB_REPOSITORY_OWNER}"
+                ;;
+              *)
+                echo "::error::Unsupported repository owner type: ${owner_type}"
+                exit 1
+                ;;
+            esac
+            package_versions=$(gh api --paginate --slurp \
+              "/${package_owner_path}/packages/container/helm-charts%2Fpaperless-ngx/versions?per_page=100")
+            if jq -e --arg version "$CHART_VERSION" \
+              'any(.[][] | .metadata.container.tags[]?; . == $version)' \
+              <<<"$package_versions" >/dev/null; then
+              echo "::error::OCI version ${CHART_VERSION} exists but could not be pulled; refusing to overwrite it"
+              exit 1
+            fi
+            echo "GitHub Packages confirms that OCI version ${CHART_VERSION} does not exist"
+            helm push "$CHART_PACKAGE" "oci://ghcr.io/${owner}/helm-charts"
           fi
+
+          helm registry logout ghcr.io >/dev/null 2>&1 || true
+          export HELM_REGISTRY_CONFIG="${anonymous_dir}/registry-config.json"
+
+          anonymous_package="${anonymous_dir}/paperless-ngx-${CHART_VERSION}.tgz"
+          verified=false
+          for attempt in $(seq 1 18); do
+            rm -f "$anonymous_package"
+            if helm pull "$repository" \
+              --version "$CHART_VERSION" \
+              --destination "$anonymous_dir" >/dev/null 2>&1; then
+              anonymous_sha=$(sha256sum "$anonymous_package" | awk '{ print $1 }')
+              if [[ "$anonymous_sha" != "$expected_sha" ]]; then
+                echo "::error::Anonymous OCI package differs from the GitHub release asset"
+                echo "release=${expected_sha}"
+                echo "oci=${anonymous_sha}"
+                exit 1
+              fi
+              verified=true
+              break
+            fi
+            echo "Anonymous OCI package is not visible yet (attempt ${attempt}/18); retrying in 10 seconds"
+            sleep 10
+          done
+
+          if [[ "$verified" != true ]]; then
+            echo "::error::OCI chart ${CHART_VERSION} is not anonymously readable. Ensure the GHCR package helm-charts/paperless-ngx is public."
+            exit 1
+          fi
+          echo "Verified anonymous OCI package SHA-256: ${expected_sha}"
 
       - name: Publish Helm repository to gh-pages
         env:
           CHART_VERSION: ${{ steps.chart.outputs.version }}
           CHART_PACKAGE: ${{ steps.chart.outputs.package }}
           PAGES_URL: https://codeopsms.github.io/paperless-ngx-helm-chart
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           pages_dir="$(mktemp -d)"
@@ -113,7 +340,7 @@ jobs:
             git fetch origin gh-pages
             git worktree add --detach "$pages_dir" origin/gh-pages
           else
-            git worktree add --detach "$pages_dir" "$GITHUB_SHA"
+            git worktree add --detach "$pages_dir" "$SOURCE_SHA"
             git -C "$pages_dir" switch --orphan gh-pages
             git -C "$pages_dir" rm -rf --ignore-unmatch .
           fi
@@ -123,7 +350,63 @@ jobs:
           cp .github/pages/index.html "$pages_dir/index.html"
           touch "$pages_dir/.nojekyll"
 
-          if [[ -f "$pages_dir/index.yaml" ]]; then
+          package_name=$(basename "$CHART_PACKAGE")
+          package_sha=$(sha256sum "$CHART_PACKAGE" | awk '{ print $1 }')
+          package_url="${PAGES_URL}/${package_name}"
+
+          index_has_package() {
+            local index_file=$1
+            awk \
+              -v expected_version="$CHART_VERSION" \
+              -v expected_digest="$package_sha" \
+              -v expected_url="$package_url" '
+              function reset_entry() {
+                version = ""
+                digest = ""
+                url = ""
+              }
+              function finish_entry() {
+                if (version == expected_version && digest == expected_digest && url == expected_url) {
+                  found = 1
+                }
+              }
+              /^  paperless-ngx:$/ { in_chart = 1; reset_entry(); next }
+              in_chart && /^  - / { finish_entry(); reset_entry(); next }
+              in_chart && /^    version:/ {
+                version = $0
+                sub(/^    version:[[:space:]]*/, "", version)
+                gsub(/"/, "", version)
+                next
+              }
+              in_chart && /^    digest:/ {
+                digest = $0
+                sub(/^    digest:[[:space:]]*/, "", digest)
+                next
+              }
+              in_chart && /^    - https?:\/\// {
+                url = $0
+                sub(/^    -[[:space:]]*/, "", url)
+                next
+              }
+              END {
+                finish_entry()
+                exit(found ? 0 : 1)
+              }
+            ' "$index_file"
+          }
+
+          index_is_current=false
+          if [[ -f "$pages_dir/index.yaml" && -f "$pages_dir/$package_name" ]]; then
+            existing_sha=$(sha256sum "$pages_dir/$package_name" | awk '{ print $1 }')
+            if [[ "$existing_sha" == "$package_sha" ]] && \
+              index_has_package "$pages_dir/index.yaml"; then
+              index_is_current=true
+            fi
+          fi
+
+          if [[ "$index_is_current" == true ]]; then
+            echo "Pages package and index entry are already current; preserving index timestamps"
+          elif [[ -f "$pages_dir/index.yaml" ]]; then
             helm repo index "$pages_dir" \
               --url "$PAGES_URL" \
               --merge "$pages_dir/index.yaml"
@@ -131,9 +414,11 @@ jobs:
             helm repo index "$pages_dir" --url "$PAGES_URL"
           fi
 
+          index_has_package "$pages_dir/index.yaml"
+
           git -C "$pages_dir" add \
             .nojekyll artifacthub-repo.yml index.html index.yaml \
-            "$(basename "$CHART_PACKAGE")"
+            "$package_name"
 
           if git -C "$pages_dir" diff --cached --quiet; then
             echo "Helm repository is already up to date."
@@ -143,3 +428,112 @@ jobs:
           git -C "$pages_dir" commit \
             -m "Publish paperless-ngx chart ${CHART_VERSION}"
           git -C "$pages_dir" push origin HEAD:gh-pages
+
+      - name: Verify public Pages package integrity
+        env:
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          PAGES_URL: https://codeopsms.github.io/paperless-ngx-helm-chart
+        run: |
+          set -euo pipefail
+          expected_sha=$(sha256sum "$CHART_PACKAGE" | awk '{ print $1 }')
+          package_name="paperless-ngx-${CHART_VERSION}.tgz"
+          verify_dir=$(mktemp -d)
+          trap 'rm -rf "$verify_dir"' EXIT
+
+          verified=false
+          for attempt in $(seq 1 30); do
+            cache_buster="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${attempt}"
+            if curl --fail --silent --show-error --location \
+              --output "$verify_dir/$package_name" \
+              "${PAGES_URL}/${package_name}?run=${cache_buster}"; then
+              pages_sha=$(sha256sum "$verify_dir/$package_name" | awk '{ print $1 }')
+              if [[ "$pages_sha" == "$expected_sha" ]]; then
+                verified=true
+                break
+              fi
+              echo "Pages still serves a different package SHA-256: ${pages_sha}"
+            fi
+            echo "Pages package is not current yet (attempt ${attempt}/30); retrying in 10 seconds"
+            sleep 10
+          done
+
+          if [[ "$verified" != true ]]; then
+            echo "::error::Pages did not publish the canonical chart package within five minutes"
+            echo "expected=${expected_sha}"
+            exit 1
+          fi
+          echo "Verified public Pages package SHA-256: ${expected_sha}"
+
+      - name: Publish immutable GitHub release last
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_NAME: ${{ steps.chart.outputs.name }}
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          tag="${CHART_NAME}-${CHART_VERSION}"
+          asset_name="${CHART_NAME}-${CHART_VERSION}.tgz"
+          metadata=$(gh release view "$tag" \
+            --json assets,isDraft,isImmutable,targetCommitish)
+          is_draft=$(jq -r '.isDraft' <<<"$metadata")
+          target_commitish=$(jq -r '.targetCommitish' <<<"$metadata")
+          unexpected_assets=$(jq \
+            --arg expected "$asset_name" \
+            '[.assets[] | select(.name != $expected)] | length' \
+            <<<"$metadata")
+          expected_assets=$(jq \
+            --arg expected "$asset_name" \
+            '[.assets[] | select(.name == $expected)] | length' \
+            <<<"$metadata")
+
+          if [[ "$unexpected_assets" -ne 0 || "$expected_assets" -ne 1 ]]; then
+            echo "::error::Release does not contain exactly the expected chart asset"
+            jq -r '.assets[].name' <<<"$metadata"
+            exit 1
+          fi
+
+          verify_dir=$(mktemp -d)
+          trap 'rm -rf "$verify_dir"' EXIT
+          gh release download "$tag" --pattern "$asset_name" --dir "$verify_dir"
+          expected_sha=$(sha256sum "$CHART_PACKAGE" | awk '{ print $1 }')
+          release_sha=$(sha256sum "$verify_dir/$asset_name" | awk '{ print $1 }')
+          if [[ "$release_sha" != "$expected_sha" ]]; then
+            echo "::error::Release asset differs from the fully published candidate"
+            echo "candidate=${expected_sha}"
+            echo "release=${release_sha}"
+            exit 1
+          fi
+
+          if [[ "$is_draft" == "true" ]]; then
+            if [[ "$target_commitish" != "$SOURCE_SHA" ]]; then
+              echo "::error::Draft targets ${target_commitish}, expected ${SOURCE_SHA}"
+              exit 1
+            fi
+            git fetch --tags --force
+            if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+              echo "::error::Git tag ${tag} appeared while the release was still a draft"
+              exit 1
+            fi
+            gh release edit "$tag" --draft=false
+            git fetch --tags --force
+            tag_commit=$(git rev-parse "${tag}^{commit}")
+            source_commit=$(git rev-parse "${SOURCE_SHA}^{commit}")
+            if [[ "$tag_commit" != "$source_commit" ]]; then
+              echo "::error::Published tag ${tag} targets ${tag_commit}, expected ${source_commit}"
+              exit 1
+            fi
+          fi
+
+          final_metadata=$(gh release view "$tag" --json isDraft,isImmutable)
+          if [[ "$(jq -r '.isDraft' <<<"$final_metadata")" != "false" ]]; then
+            echo "::error::GitHub release is still a draft"
+            exit 1
+          fi
+          if [[ "$(jq -r '.isImmutable' <<<"$final_metadata")" != "true" ]]; then
+            echo "::error::Published GitHub release is not immutable"
+            exit 1
+          fi
+          echo "Published immutable GitHub release ${tag}: ${expected_sha}"

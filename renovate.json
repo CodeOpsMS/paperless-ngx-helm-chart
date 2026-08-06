@@ -24,7 +24,7 @@
         "/^\\.github/workflows/.*\\.ya?ml$/"
       ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+) packageName=(?<packageName>[^\\s]+) versioning=(?<versioning>[^\\s]+)\\s+(?:-\\s+|version:\\s+)(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+) packageName=(?<packageName>[^\\s]+) versioning=(?<versioning>[^\\s]+)\\s+(?:-\\s+(?:&[^\\s]+\\s+)?|version:\\s+)(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
       ]
     }
   ],

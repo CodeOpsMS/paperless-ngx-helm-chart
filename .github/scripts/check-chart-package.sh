@@ -15,6 +15,8 @@ tar -tzf "$package" >"$contents"
 
 grep -qx "${chart_name}/NOTICE" "$contents"
 grep -qx "${chart_name}/LICENSES/CodeOpsMS-MIT.txt" "$contents"
+grep -qx "${chart_name}/UPGRADE-0.4.md" "$contents"
+grep -qx "${chart_name}/values.schema.json" "$contents"
 
 if grep -Eq "^${chart_name}/LICENSE([.][^/]*)?$" "$contents"; then
   echo "The packaged chart must not declare a package-wide root license"
@@ -31,6 +33,11 @@ if grep -q "^${chart_name}/.github/" "$contents"; then
   exit 1
 fi
 
+if grep -Eq "^${chart_name}/\.(candidate|release-packages)/" "$contents"; then
+  echo "The packaged chart must not contain local chart build artifacts"
+  exit 1
+fi
+
 if grep -qx "${chart_name}/renovate.json" "$contents"; then
   echo "The packaged chart must not contain repository automation config"
   exit 1
@@ -41,7 +48,7 @@ if grep -qx "${chart_name}/.mailmap" "$contents"; then
   exit 1
 fi
 
-if grep -Eq "^${chart_name}/scripts/" "$contents"; then
-  echo "The packaged chart must not contain repository-only scripts"
+if grep -Eq "^${chart_name}/(scripts|tests)/" "$contents"; then
+  echo "The packaged chart must not contain repository-only scripts or unit tests"
   exit 1
 fi

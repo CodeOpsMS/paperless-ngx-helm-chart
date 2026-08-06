@@ -1,0 +1,959 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Paperless-ngx Helm chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "additionalLabels": {
+      "type": "object",
+      "propertyNames": {
+        "not": {
+          "enum": [
+            "helm.sh/chart",
+            "app.kubernetes.io/name",
+            "app.kubernetes.io/instance",
+            "app.kubernetes.io/version",
+            "app.kubernetes.io/managed-by",
+            "app.kubernetes.io/component"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "additionalAnnotations": {
+      "type": "object",
+      "propertyNames": {
+        "not": {
+          "enum": [
+            "paperless-ngx.codeopsms.de/secret-revision",
+            "checksum/postgresql",
+            "checksum/valkey"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "type": "string", "pattern": "^/" },
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["enabled", "path", "periodSeconds", "timeoutSeconds", "failureThreshold"]
+    },
+    "keySelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "minLength": 1 },
+        "optional": { "type": "boolean" }
+      },
+      "required": ["name", "key"]
+    },
+    "envValue": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "valueFrom": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "secretKeyRef": { "$ref": "#/definitions/keySelector" },
+                "configMapKeyRef": { "$ref": "#/definitions/keySelector" },
+                "fieldRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "apiVersion": { "type": "string" },
+                    "fieldPath": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["fieldPath"]
+                },
+                "resourceFieldRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "containerName": { "type": "string" },
+                    "resource": { "type": "string", "minLength": 1 },
+                    "divisor": { "type": "string" }
+                  },
+                  "required": ["resource"]
+                }
+              },
+              "minProperties": 1,
+              "maxProperties": 1
+            }
+          },
+          "oneOf": [
+            { "required": ["value"] },
+            { "required": ["valueFrom"] }
+          ]
+        }
+      ]
+    },
+    "postgresqlSecretKeys": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "adminPasswordKey": { "type": "string", "minLength": 1 },
+        "userPasswordKey": { "type": "string", "minLength": 1 },
+        "replicationPasswordKey": { "type": "string", "minLength": 1 }
+      }
+    },
+    "postgresqlGlobalSecretKeys": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "adminPasswordKey": { "type": "string" },
+        "userPasswordKey": { "type": "string" },
+        "replicationPasswordKey": { "type": "string" }
+      }
+    },
+    "resourceQuantity": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "number", "exclusiveMinimum": 0 }
+      ]
+    },
+    "postgresqlAuth": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "postgresPassword": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "database": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "secretKeys": { "$ref": "#/definitions/postgresqlSecretKeys" }
+      }
+    },
+    "postgresqlGlobalAuth": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "postgresPassword": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "database": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "secretKeys": { "$ref": "#/definitions/postgresqlGlobalSecretKeys" }
+      }
+    }
+  },
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "imagePullSecrets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "defaultStorageClass": { "type": "string" },
+        "storageClass": { "type": "string" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "registry": { "type": ["string", "null"] },
+            "pullPolicy": { "type": ["string", "null"], "enum": ["Always", "IfNotPresent", "Never", null] }
+          }
+        },
+        "postgresql": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "fullnameOverride": { "type": "string" },
+            "auth": { "$ref": "#/definitions/postgresqlGlobalAuth" },
+            "service": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "ports": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "postgresql": { "type": ["integer", "string"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "name": { "type": "string", "minLength": 1 } },
+        "required": ["name"]
+      }
+    },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "registry": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "minLength": 1 },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "tag": { "type": "string" },
+        "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" }
+      },
+      "required": ["registry", "repository", "pullPolicy", "tag", "digest"]
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" },
+        "automount": { "type": "boolean" },
+        "annotations": { "$ref": "#/definitions/labels" },
+        "name": { "type": "string" }
+      },
+      "required": ["create", "automount", "annotations", "name"]
+    },
+    "deploymentLabels": { "$ref": "#/definitions/additionalLabels" },
+    "podAnnotations": { "$ref": "#/definitions/additionalAnnotations" },
+    "podLabels": { "$ref": "#/definitions/additionalLabels" },
+    "podSecurityContext": { "type": "object" },
+    "securityContext": { "type": "object" },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["RollingUpdate", "Recreate"] },
+        "rollingUpdate": { "type": "object" }
+      },
+      "required": ["type"]
+    },
+    "progressDeadlineSeconds": { "type": "integer", "minimum": 1800 },
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "secretRevision": { "type": "integer", "minimum": 0 },
+        "url": { "type": "string" },
+        "apps": { "type": "string" },
+        "secretKey": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "key": { "type": "string", "minLength": 1 }
+              },
+              "required": ["name", "key"]
+            }
+          },
+          "required": ["existingSecret"]
+        },
+        "redis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string" },
+            "prefix": { "type": "string" },
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "urlKey": { "type": "string", "minLength": 1 }
+              },
+              "required": ["name", "urlKey"]
+            }
+          },
+          "required": ["url", "prefix", "existingSecret"]
+        },
+        "database": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "engine": { "type": "string", "enum": ["postgresql", "mariadb", "sqlite"] },
+            "host": { "type": "string" },
+            "port": { "type": ["integer", "null"], "minimum": 1, "maximum": 65535 },
+            "name": { "type": "string", "minLength": 1 },
+            "user": { "type": "string", "minLength": 1 },
+            "password": { "type": "string" },
+            "options": { "type": "string" },
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "passwordKey": { "type": "string", "minLength": 1 }
+              },
+              "required": ["name", "passwordKey"]
+            }
+          },
+          "required": ["engine", "host", "name", "user", "password", "options", "existingSecret"]
+        },
+        "oidcProviders": {
+          "type": ["object", "array", "null"]
+        }
+      },
+      "required": ["secretRevision", "url", "apps", "secretKey", "redis", "database"]
+    },
+    "env": {
+      "type": "object",
+      "propertyNames": {
+        "not": {
+          "enum": [
+            "PAPERLESS_SECRET_KEY",
+            "PAPERLESS_URL",
+            "PAPERLESS_REDIS",
+            "PAPERLESS_REDIS_PREFIX",
+            "PAPERLESS_DBENGINE",
+            "PAPERLESS_DBHOST",
+            "PAPERLESS_DBPORT",
+            "PAPERLESS_DBNAME",
+            "PAPERLESS_DBUSER",
+            "PAPERLESS_DBPASS",
+            "PAPERLESS_DB_OPTIONS",
+            "PAPERLESS_APPS",
+            "PAPERLESS_SOCIALACCOUNT_PROVIDERS",
+            "PAPERLESS_CONSUMER_POLLING",
+            "PAPERLESS_CONSUMER_INOTIFY_DELAY",
+            "PAPERLESS_CONSUMER_POLLING_DELAY",
+            "PAPERLESS_CONSUMER_POLLING_RETRY_COUNT",
+            "PAPERLESS_CONSUMER_BARCODE_SCANNER",
+            "PAPERLESS_DBSSLMODE",
+            "PAPERLESS_DBSSLROOTCERT",
+            "PAPERLESS_DBSSLCERT",
+            "PAPERLESS_DBSSLKEY",
+            "PAPERLESS_DB_POOLSIZE",
+            "PAPERLESS_DB_TIMEOUT",
+            "PAPERLESS_OCR_SKIP_ARCHIVE_FILE"
+          ]
+        }
+      },
+      "properties": {
+        "PAPERLESS_OCR_MODE": {
+          "type": "string",
+          "enum": ["auto", "force", "redo", "off"]
+        }
+      },
+      "additionalProperties": { "$ref": "#/definitions/envValue" }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      },
+      "required": ["type", "port"]
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/labels" },
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "host": { "type": "string", "minLength": 1 },
+              "paths": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": { "type": "string", "pattern": "^/" },
+                    "pathType": { "type": "string", "enum": ["ImplementationSpecific", "Exact", "Prefix"] }
+                  },
+                  "required": ["path", "pathType"]
+                }
+              }
+            },
+            "required": ["host", "paths"]
+          }
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "secretName": { "type": "string", "minLength": 1 },
+              "hosts": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            },
+            "required": ["secretName", "hosts"]
+          }
+        }
+      },
+      "required": ["enabled", "className", "annotations", "hosts", "tls"]
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "requests": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "cpu": { "$ref": "#/definitions/resourceQuantity" },
+            "memory": { "$ref": "#/definitions/resourceQuantity" }
+          }
+        }
+      }
+    },
+    "livenessProbe": { "$ref": "#/definitions/probe" },
+    "readinessProbe": { "$ref": "#/definitions/probe" },
+    "startupProbe": { "$ref": "#/definitions/probe" },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "http": { "type": "array" },
+            "metrics": { "type": "array" }
+          },
+          "required": ["http", "metrics"]
+        },
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "dns": { "type": "array" },
+            "database": { "type": "array" },
+            "extra": { "type": "array" }
+          },
+          "required": ["enabled", "dns", "database", "extra"]
+        }
+      },
+      "required": ["enabled", "ingress", "egress"]
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "retain": { "type": "boolean" },
+        "annotations": { "$ref": "#/definitions/labels" },
+        "storageClass": { "type": ["string", "null"] },
+        "existingClaim": { "type": ["string", "null"] },
+        "hostPath": { "type": ["string", "null"] },
+        "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany", "ReadWriteOncePod"] },
+        "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)$" }
+      },
+      "required": ["enabled", "retain", "annotations", "accessMode", "size"]
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "targetCPUUtilizationPercentage": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 },
+        "targetMemoryUtilizationPercentage": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 }
+      },
+      "required": ["enabled", "minReplicas", "maxReplicas"]
+    },
+    "volumes": { "type": "array" },
+    "volumeMounts": { "type": "array" },
+    "nodeSelector": { "type": "object" },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag", "digest", "pullPolicy"]
+        },
+        "resources": { "type": "object" }
+      },
+      "required": ["enabled", "image", "resources"]
+    },
+    "prometheus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servicemonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "labels": { "$ref": "#/definitions/additionalLabels" },
+            "interval": { "type": ["string", "null"] },
+            "scrapeTimeout": { "type": ["string", "null"] }
+          },
+          "required": ["enabled", "labels"]
+        },
+        "rules": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "labels": { "$ref": "#/definitions/additionalLabels" },
+            "additionalRules": { "type": "array" }
+          },
+          "required": ["enabled", "labels", "additionalRules"]
+        }
+      },
+      "required": ["servicemonitor", "rules"]
+    },
+    "grafana": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dashboards": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "labels": { "$ref": "#/definitions/additionalLabels" },
+            "annotations": { "$ref": "#/definitions/labels" }
+          },
+          "required": ["enabled", "labels", "annotations"]
+        }
+      },
+      "required": ["dashboards"]
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespaceOverride": { "type": "string", "const": "" },
+        "credentialsRevision": { "type": "integer", "minimum": 0 },
+        "image": { "type": "object" },
+        "auth": { "$ref": "#/definitions/postgresqlAuth" },
+        "commonLabels": { "$ref": "#/definitions/additionalLabels" },
+        "primary": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "podLabels": { "$ref": "#/definitions/additionalLabels" }
+          }
+        },
+        "readReplicas": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "podLabels": { "$ref": "#/definitions/additionalLabels" }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "valkey": {
+      "type": "object",
+      "properties": {
+        "internal": { "type": "boolean" },
+        "dbid": { "type": "integer", "minimum": 0 },
+        "auth": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "port": { "type": "integer", "const": 6379 }
+          },
+          "required": ["port"],
+          "additionalProperties": true
+        },
+        "image": { "type": "object" },
+        "dataStorage": { "type": "object" },
+        "commonLabels": { "$ref": "#/definitions/additionalLabels" },
+        "podLabels": { "$ref": "#/definitions/additionalLabels" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "valkey": {
+            "properties": { "internal": { "const": true } },
+            "required": ["internal"]
+          }
+        },
+        "required": ["valkey"]
+      },
+      "then": {
+        "properties": {
+          "valkey": {
+            "properties": {
+              "auth": {
+                "properties": { "enabled": { "const": false } }
+              },
+              "tls": {
+                "properties": { "enabled": { "const": false } }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "autoscaling": {
+            "properties": { "enabled": { "const": true } },
+            "required": ["enabled"]
+          }
+        },
+        "required": ["autoscaling"],
+        "anyOf": [
+          {
+            "properties": {
+              "autoscaling": {
+                "properties": {
+                  "targetCPUUtilizationPercentage": { "type": "integer" }
+                },
+                "required": ["targetCPUUtilizationPercentage"]
+              }
+            }
+          },
+          {
+            "not": {
+              "properties": {
+                "autoscaling": {
+                  "properties": {
+                    "targetMemoryUtilizationPercentage": { "type": "integer" }
+                  },
+                  "required": ["targetMemoryUtilizationPercentage"]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "resources": {
+            "properties": {
+              "requests": {
+                "properties": {
+                  "cpu": { "$ref": "#/definitions/resourceQuantity" }
+                },
+                "required": ["cpu"]
+              }
+            },
+            "required": ["requests"]
+          }
+        },
+        "required": ["resources"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "autoscaling": {
+            "properties": {
+              "enabled": { "const": true },
+              "targetMemoryUtilizationPercentage": { "type": "integer" }
+            },
+            "required": ["enabled", "targetMemoryUtilizationPercentage"]
+          }
+        },
+        "required": ["autoscaling"]
+      },
+      "then": {
+        "properties": {
+          "resources": {
+            "properties": {
+              "requests": {
+                "properties": {
+                  "memory": { "$ref": "#/definitions/resourceQuantity" }
+                },
+                "required": ["memory"]
+              }
+            },
+            "required": ["requests"]
+          }
+        },
+        "required": ["resources"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "valkey": {
+            "properties": { "internal": { "const": false } },
+            "required": ["internal"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "properties": {
+              "redis": {
+                "anyOf": [
+                  { "properties": { "url": { "minLength": 1 } } },
+                  { "properties": { "existingSecret": { "properties": { "name": { "minLength": 1 } } } } }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "postgresql": {
+            "properties": { "enabled": { "const": true } },
+            "required": ["enabled"]
+          }
+        },
+        "required": ["postgresql"]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "properties": {
+              "database": {
+                "properties": {
+                  "engine": { "const": "postgresql" },
+                  "host": { "const": "" },
+                  "port": { "type": "null" },
+                  "name": { "const": "paperless" },
+                  "user": { "const": "paperless" },
+                  "password": { "const": "" },
+                  "existingSecret": {
+                    "properties": { "name": { "const": "" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "postgresql": {
+            "properties": { "enabled": { "const": false } },
+            "required": ["enabled"]
+          },
+          "config": {
+            "properties": {
+              "database": {
+                "properties": { "engine": { "not": { "const": "sqlite" } } },
+                "required": ["engine"]
+              }
+            },
+            "required": ["database"]
+          }
+        },
+        "required": ["postgresql", "config"]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "properties": {
+              "database": {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "password": { "minLength": 1 },
+                      "existingSecret": {
+                        "properties": { "name": { "maxLength": 0 } }
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "password": { "maxLength": 0 },
+                      "existingSecret": {
+                        "properties": { "name": { "minLength": 1 } }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "config": {
+            "properties": {
+              "database": {
+                "properties": {
+                  "engine": { "enum": ["mariadb", "sqlite"] }
+                },
+                "required": ["engine"]
+              }
+            },
+            "required": ["database"]
+          }
+        },
+        "required": ["config"]
+      },
+      "then": {
+        "properties": {
+          "postgresql": {
+            "properties": {
+              "enabled": { "const": false }
+            },
+            "required": ["enabled"]
+          }
+        },
+        "required": ["postgresql"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "postgresql": {
+            "properties": { "enabled": { "const": false } },
+            "required": ["enabled"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "properties": {
+              "database": {
+                "anyOf": [
+                  {
+                    "properties": { "engine": { "const": "sqlite" } },
+                    "required": ["engine"]
+                  },
+                  {
+                    "properties": { "host": { "minLength": 1 } },
+                    "required": ["host"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "networkPolicy": {
+            "properties": {
+              "enabled": { "const": true },
+              "egress": {
+                "properties": { "enabled": { "const": true } },
+                "required": ["enabled"]
+              }
+            },
+            "required": ["enabled", "egress"]
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "postgresql": {
+                "properties": { "enabled": { "const": false } },
+                "required": ["enabled"]
+              },
+              "config": {
+                "properties": {
+                  "database": {
+                    "properties": { "engine": { "not": { "const": "sqlite" } } },
+                    "required": ["engine"]
+                  }
+                },
+                "required": ["database"]
+              }
+            },
+            "required": ["postgresql", "config"]
+          },
+          {
+            "properties": {
+              "valkey": {
+                "properties": { "internal": { "const": false } },
+                "required": ["internal"]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "networkPolicy": {
+            "properties": {
+              "egress": {
+                "properties": {
+                  "database": { "minItems": 1 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

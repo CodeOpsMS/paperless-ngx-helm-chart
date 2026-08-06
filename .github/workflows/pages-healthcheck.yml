@@ -13,10 +13,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           # renovate: datasource=github-releases depName=helm-v4 packageName=helm/helm versioning=semver
           version: v4.2.3
@@ -32,21 +32,32 @@ jobs:
           repo_owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
           repo_name="${GITHUB_REPOSITORY#*/}"
           repo_url="https://${repo_owner}.github.io/${repo_name}/"
+          oci_repository="oci://ghcr.io/${repo_owner}/helm-charts/paperless-ngx"
+          baseline_version=0.3.23
+          baseline_sha=6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
+          check_dir=$(mktemp -d)
+          registry_dir=$(mktemp -d)
+          cleanup() {
+            rm -rf "$check_dir" "$registry_dir"
+          }
+          trap cleanup EXIT
+          export HELM_REGISTRY_CONFIG="${registry_dir}/config.json"
 
           curl --fail --silent --show-error --location --retry 3 --retry-delay 10 \
-            --output index.yaml "${repo_url}index.yaml"
+            --output "$check_dir/index.yaml" "${repo_url}index.yaml"
           curl --fail --silent --show-error --location --retry 3 --retry-delay 10 \
-            --output artifacthub-repo.yml "${repo_url}artifacthub-repo.yml"
+            --output "$check_dir/artifacthub-repo.yml" "${repo_url}artifacthub-repo.yml"
 
-          test -s index.yaml
-          grep -q '^apiVersion:' index.yaml
-          grep -q '^entries:' index.yaml
-          test -s artifacthub-repo.yml
-          grep -q '^repositoryID: 9d5a07d6-7540-44fe-a74c-d98953891494$' artifacthub-repo.yml
-          grep -q '^owners:' artifacthub-repo.yml
-          grep -q 'name: CodeOpsMS' artifacthub-repo.yml
+          test -s "$check_dir/index.yaml"
+          grep -q '^apiVersion:' "$check_dir/index.yaml"
+          grep -q '^entries:' "$check_dir/index.yaml"
+          test -s "$check_dir/artifacthub-repo.yml"
+          grep -q '^repositoryID: 9d5a07d6-7540-44fe-a74c-d98953891494$' "$check_dir/artifacthub-repo.yml"
+          grep -q '^owners:' "$check_dir/artifacthub-repo.yml"
+          grep -q 'name: CodeOpsMS' "$check_dir/artifacthub-repo.yml"
 
           helm repo add paperless "$repo_url"
+          helm repo update paperless
           published_version=$(helm search repo paperless/paperless-ngx --versions --output json \
             | jq -r '.[0].version // empty')
 
@@ -56,23 +67,94 @@ jobs:
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest")
           latest_tag=$(jq -r '.tag_name // empty' <<< "$release_json")
           latest_version=${latest_tag#paperless-ngx-}
-          asset_url=$(jq -r --arg name "paperless-ngx-${latest_version}.tgz" \
-            '.assets[] | select(.name == $name) | .browser_download_url' <<< "$release_json")
 
           if [ -z "$published_version" ] || [ "$published_version" != "$latest_version" ]; then
             echo "Published index is stale: index=${published_version:-missing}, release=${latest_version:-missing}"
             exit 1
           fi
-          if [ -z "$asset_url" ]; then
-            echo "Release asset paperless-ngx-${latest_version}.tgz is missing"
-            exit 1
-          fi
 
-          chart_package="paperless-ngx-${published_version}.tgz"
-          helm pull paperless/paperless-ngx --version "$published_version"
-          bash .github/scripts/check-chart-package.sh "$chart_package"
-          bash .github/scripts/check-chart-icon.sh "$chart_package"
-          curl --fail --silent --show-error --location --retry 3 \
-            --output /dev/null "$asset_url"
+          pull_oci_anonymously() {
+            local version=$1
+            local destination=$2
+            local package="${destination}/paperless-ngx-${version}.tgz"
+            local pulled=false
+
+            for attempt in $(seq 1 6); do
+              rm -f "$package"
+              if helm pull "$oci_repository" \
+                --version "$version" \
+                --destination "$destination" >/dev/null 2>&1; then
+                pulled=true
+                break
+              fi
+              echo "Anonymous OCI pull for ${version} failed (attempt ${attempt}/6); retrying in 10 seconds"
+              sleep 10
+            done
+
+            if [[ "$pulled" != true ]]; then
+              echo "::error::OCI chart ${version} is not anonymously readable"
+              return 1
+            fi
+          }
+
+          verify_published_version() {
+            local version=$1
+            local version_dir="${check_dir}/${version}"
+            local pages_dir="${version_dir}/pages"
+            local release_dir="${version_dir}/release"
+            local oci_dir="${version_dir}/oci"
+            local package="paperless-ngx-${version}.tgz"
+            local actual_version
+            local pages_sha
+            local release_sha
+            local oci_sha
+            mkdir -p "$pages_dir" "$release_dir" "$oci_dir"
+
+            helm pull paperless/paperless-ngx \
+              --version "$version" \
+              --destination "$pages_dir"
+            curl --fail --silent --show-error --location --retry 3 --retry-delay 10 \
+              --output "${release_dir}/${package}" \
+              "https://github.com/${GITHUB_REPOSITORY}/releases/download/paperless-ngx-${version}/${package}"
+            pull_oci_anonymously "$version" "$oci_dir"
+
+            actual_version=$(helm show chart "${pages_dir}/${package}" \
+              | awk '/^version:/ { print $2; exit }')
+            if [[ "$actual_version" != "$version" ]]; then
+              echo "::error::Published package version mismatch: expected=${version}, actual=${actual_version:-missing}"
+              return 1
+            fi
+
+            # The current package policy intentionally requires files that were
+            # introduced with chart 0.4.0. Keep checking the historical 0.3.23
+            # bytes and icon without retroactively applying that newer shape.
+            if [[ "$version" != "$baseline_version" ]]; then
+              bash .github/scripts/check-chart-package.sh "${pages_dir}/${package}"
+            fi
+            bash .github/scripts/check-chart-icon.sh "${pages_dir}/${package}"
+
+            pages_sha=$(sha256sum "${pages_dir}/${package}" | awk '{ print $1 }')
+            release_sha=$(sha256sum "${release_dir}/${package}" | awk '{ print $1 }')
+            oci_sha=$(sha256sum "${oci_dir}/${package}" | awk '{ print $1 }')
+            if [[ "$pages_sha" != "$release_sha" || "$pages_sha" != "$oci_sha" ]]; then
+              echo "::error::Published chart ${version} differs across Pages, GitHub Releases, and OCI"
+              echo "pages=${pages_sha}"
+              echo "release=${release_sha}"
+              echo "oci=${oci_sha}"
+              return 1
+            fi
+            if [[ "$version" == "$baseline_version" && "$pages_sha" != "$baseline_sha" ]]; then
+              echo "::error::Historical chart ${baseline_version} no longer matches its recorded SHA-256"
+              echo "expected=${baseline_sha}"
+              echo "actual=${pages_sha}"
+              return 1
+            fi
+            echo "Verified paperless-ngx ${version} across Pages, Releases, and anonymous OCI: ${pages_sha}"
+          }
+
+          verify_published_version "$latest_version"
+          if [[ "$latest_version" != "$baseline_version" ]]; then
+            verify_published_version "$baseline_version"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

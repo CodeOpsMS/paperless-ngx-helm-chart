@@ -1,3 +1,6 @@
 charts/*.tgz
+.candidate/
 .release-packages/
+__pycache__/
+*.pyc
 values_test.yaml
