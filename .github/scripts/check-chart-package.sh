@@ -40,3 +40,8 @@ if grep -qx "${chart_name}/.mailmap" "$contents"; then
   echo "The packaged chart must not contain repository identity mappings"
   exit 1
 fi
+
+if grep -Eq "^${chart_name}/scripts/" "$contents"; then
+  echo "The packaged chart must not contain repository-only scripts"
+  exit 1
+fi

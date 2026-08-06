@@ -10,6 +10,7 @@
 .release-packages/
 artifacthub-repo.yml
 renovate.json
+scripts/
 .bzr/
 .bzrignore
 .hg/
