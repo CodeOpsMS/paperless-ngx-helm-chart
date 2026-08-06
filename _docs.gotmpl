@@ -72,6 +72,33 @@ helm install paperless-ngx \
   --create-namespace
 ```
 
+GHCR keeps both supported chart release lines addressable by version:
+
+| Chart version | Paperless-ngx | Purpose |
+|---------------|---------------|---------|
+| `0.3.23` | `2.20.15` | Last Paperless 2 release |
+| `{{ template "chart.version" . }}` | `{{ template "chart.appVersion" . }}` | Paperless 3 release |
+
+Use distinct release names and namespaces to run both versions in parallel:
+
+```bash
+helm install paperless-v2 \
+  oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
+  --version 0.3.23 \
+  --namespace paperless-v2 \
+  --create-namespace
+
+helm install paperless-v3 \
+  oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
+  --version {{ template "chart.version" . }} \
+  --namespace paperless-v3 \
+  --create-namespace
+```
+
+Give the two releases separate ingress hosts, Secrets, databases, and persistent
+volumes. Never attach the Paperless 2 and Paperless 3 releases to the same
+PostgreSQL database, Valkey state, or Paperless data/media PVCs.
+
 For production, store `PAPERLESS_SECRET_KEY`, database credentials, and any
 external broker URL in Kubernetes Secrets and reference them through
 `config.*.existingSecret`.

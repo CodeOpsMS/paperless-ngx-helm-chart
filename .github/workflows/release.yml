@@ -109,13 +109,37 @@ jobs:
 
           if helm show chart "$repository" --version "$CHART_VERSION" >/dev/null 2>&1; then
             echo "paperless-ngx ${CHART_VERSION} already exists in GHCR; skipping OCI push"
-            exit 0
+          else
+            cleanup_registry() {
+              helm registry logout ghcr.io >/dev/null 2>&1 || true
+            }
+            trap cleanup_registry EXIT
+
+            printf '%s' "$GH_TOKEN" | helm registry login ghcr.io \
+              --username "$GITHUB_ACTOR" \
+              --password-stdin
+            helm push "$CHART_PACKAGE" "oci://ghcr.io/${owner}/helm-charts"
+
+            cleanup_registry
+            trap - EXIT
           fi
 
-          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io \
-            --username "$GITHUB_ACTOR" \
-            --password-stdin
-          helm push "$CHART_PACKAGE" "oci://ghcr.io/${owner}/helm-charts"
+      - name: Verify anonymous OCI access
+        env:
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          set -euo pipefail
+          owner=$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          repository="oci://ghcr.io/${owner}/helm-charts/paperless-ngx"
+          registry_dir="$(mktemp -d)"
+          trap 'rm -rf "$registry_dir"' EXIT
+          export HELM_REGISTRY_CONFIG="${registry_dir}/config.json"
+
+          if ! helm show chart "$repository" --version "$CHART_VERSION" >/dev/null; then
+            echo "::error::OCI chart ${CHART_VERSION} is not anonymously readable. Ensure the GHCR package helm-charts/paperless-ngx is public."
+            exit 1
+          fi
+          echo "Verified anonymous OCI access for paperless-ngx ${CHART_VERSION}"
 
       - name: Publish Helm repository to gh-pages
         env:
