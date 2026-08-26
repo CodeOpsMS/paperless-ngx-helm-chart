@@ -167,7 +167,7 @@ the old file unchanged and do not use `--reuse-values`.
 | `env.PAPERLESS_CONSUMER_INOTIFY_DELAY` | `env.PAPERLESS_CONSUMER_STABILITY_DELAY` |
 | `env.PAPERLESS_SEARCH_LANGUAGE` | Remove it for Paperless 3.0.5; the schema rejects this known startup-breaking setting |
 | API clients using versions 1-8 | API version 9 or 10 |
-| Default rolling Deployment update | Default `strategy.type: Recreate`; opt in to `RollingUpdate` only after the major migration has completed and been accepted |
+| Default rolling Deployment update | Zero-surge `RollingUpdate` (`maxSurge: 0`, `maxUnavailable: 100%`); the required scale-to-zero step below is what prevents mixed v2/v3 processes during the major migration |
 | `serviceAccount.automount: true` default | Default is now `false`; enable it explicitly only if an integration in the Paperless pod needs the Kubernetes API token |
 | `persistence.enabled: true` | Chart-managed Paperless PVCs now default to `persistence.retain: true` and survive Helm uninstall |
 | Dependency-wide registry/OpenShift values | `global.imageRegistry`, `global.security.allowInsecureImages`, and `global.compatibility.openshift.adaptSecurityContext` remain supported; `global.image.registry` controls the Paperless image |
@@ -311,13 +311,28 @@ been rehearsed.
    Leave PostgreSQL and Valkey running:
 
    ```bash
+   paperless_v2_pods=$(kubectl get pod -n paperless-ngx \
+     -l app.kubernetes.io/instance=paperless-ngx,app.kubernetes.io/name=paperless-ngx \
+     -o name)
+   test -n "$paperless_v2_pods"
    kubectl delete hpa paperless-ngx -n paperless-ngx --ignore-not-found
    kubectl scale deployment paperless-ngx -n paperless-ngx --replicas=0
    kubectl rollout status deployment/paperless-ngx -n paperless-ngx --timeout=5m
+   for pod in $paperless_v2_pods; do
+     kubectl wait --for=delete "$pod" -n paperless-ngx --timeout=5m
+   done
+   remaining=$(kubectl get pod -n paperless-ngx \
+     -l app.kubernetes.io/instance=paperless-ngx,app.kubernetes.io/name=paperless-ngx \
+     --field-selector='status.phase!=Succeeded,status.phase!=Failed' \
+     -o name)
+   test -z "$remaining"
    ```
 
-   The chart's default `Recreate` strategy is a second guard against mixed
-   Paperless 2/3 pods; it does not replace this explicit shutdown.
+   The chart defaults to a zero-surge, fully unavailable `RollingUpdate` so it
+   remains compatible with Helm 4 server-side apply and does not create an
+   extra application pod. It does **not** replace this explicit shutdown: only
+   scaling to zero and waiting for completion proves that no Paperless 2
+   process remains when Paperless 3 starts.
 
 4. Upgrade with the reviewed values file and the exact validated chart package:
 
@@ -330,16 +345,30 @@ been rehearsed.
      --values paperless-0.4-values.yaml \
      --wait \
      --timeout 40m
+   kubectl rollout status deployment/paperless-ngx \
+     -n paperless-ngx --timeout=40m
+   kubectl wait pod -n paperless-ngx \
+     -l app.kubernetes.io/instance=paperless-ngx,app.kubernetes.io/name=paperless-ngx,app.kubernetes.io/component=web \
+     --for=condition=Ready --timeout=40m
    ```
 
    Do not use `--reuse-values`, `--atomic`, or `--cleanup-on-fail`. An automatic
    Helm rollback cannot reverse Paperless database migrations safely.
+   The explicit rollout and readiness waits are required because a fully
+   unavailable RollingUpdate can satisfy Helm's availability threshold before
+   the new Paperless pod is ready.
+
+   The zero-surge, fully unavailable settings remain active after this upgrade
+   and cause downtime on every later application rollout. After accepting the
+   completed migration, availability-oriented values such as `maxSurge: 1` and
+   `maxUnavailable: 0` may be tested and applied for subsequent upgrades.
 
 5. Follow the Paperless logs. The first Paperless 3 start applies database and
    application migrations, converts document checksums, and rebuilds the
    incompatible Whoosh search index as Tantivy. The default startup probe permits
-   up to 30 minutes; increase the probe and Helm timeout before upgrading a very
-   large archive rather than interrupting these operations.
+   up to 30 minutes; increase the startup probe, Helm timeout, and both explicit
+   `kubectl` wait timeouts together before upgrading a very large archive rather
+   than interrupting these operations.
 
 ## Acceptance checks
 

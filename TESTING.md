@@ -72,7 +72,9 @@ objects and upstream test-fixture PDFs, rehearses a PostgreSQL logical restore,
 scales the application to zero, upgrades the exact candidate, and verifies
 Paperless 3, PostgreSQL 17.6, Valkey 9.0.5, Tantivy search, API v10, Secret
 preservation, PVC names and UIDs, mount ownership and modes, file hashes, and a
-`Recreate` rollout with exactly one migration pod and no HPA.
+zero-surge, fully unavailable rollout with exactly one migration pod and no
+HPA. It also waits for every Deployment-owned Paperless 2 pod to be deleted
+before installing the Paperless 3 candidate.
 It drains the Paperless 2 task queue before shutdown and proves that a new
 document can be consumed after the upgrade. NetworkPolicy is enabled throughout
 the run, and the restore rehearsal compares exact row-count signatures for the

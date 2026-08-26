@@ -77,9 +77,16 @@ securityContext: {}
   # runAsUser: 1000
 
 strategy:
-  # -- Deployment strategy. Recreate prevents Paperless 2 and 3 from running
-  # concurrently against the same database during the major-version upgrade.
-  type: Recreate
+  # -- Deployment strategy. Zero surge avoids creating an extra application
+  # pod. RollingUpdate is the only supported type because Helm 4 server-side
+  # apply cannot safely clear the old rollingUpdate field during a live switch
+  # to Recreate. The disruptive defaults cause downtime on every rollout. The
+  # Paperless 3 upgrade still requires the documented complete scale-to-zero
+  # and wait procedure.
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 100%
 
 # -- Deadline for a Deployment rollout. The default leaves five minutes of
 # headroom beyond the 30-minute startup probe window used for migrations.

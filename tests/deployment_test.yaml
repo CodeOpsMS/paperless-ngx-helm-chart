@@ -55,26 +55,13 @@ tests:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
           value: /
 
-  - it: uses Recreate to prevent mixed-major-version overlap
+  - it: uses a zero-surge fully unavailable rollout by default
     set:
-      replicaCount: 3
+      replicaCount: 1
     asserts:
       - equal:
           path: spec.replicas
-          value: 3
-      - equal:
-          path: spec.strategy.type
-          value: Recreate
-      - equal:
-          path: spec.template.spec.terminationGracePeriodSeconds
-          value: 60
-
-  - it: allows an explicit RollingUpdate strategy after migration
-    set:
-      strategy.type: RollingUpdate
-      strategy.rollingUpdate.maxSurge: 0
-      strategy.rollingUpdate.maxUnavailable: 1
-    asserts:
+          value: 1
       - equal:
           path: spec.strategy.type
           value: RollingUpdate
@@ -83,7 +70,26 @@ tests:
           value: 0
       - equal:
           path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 100%
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+
+  - it: allows an availability-oriented RollingUpdate strategy after migration
+    set:
+      strategy.type: RollingUpdate
+      strategy.rollingUpdate.maxSurge: 1
+      strategy.rollingUpdate.maxUnavailable: 0
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
           value: 1
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 0
 
   - it: maps all supported external secrets to Kubernetes EnvVars
     set:

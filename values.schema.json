@@ -142,7 +142,13 @@
     "intOrPercentage": {
       "oneOf": [
         { "type": "integer", "minimum": 0 },
-        { "type": "string", "pattern": "^[0-9]+%?$" }
+        { "type": "string", "pattern": "^(0|[1-9][0-9]*)%$" }
+      ]
+    },
+    "intOrPercentageMax100": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "string", "pattern": "^(0|[1-9][0-9]?|100)%$" }
       ]
     },
     "postgresqlAuth": {
@@ -284,21 +290,33 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": { "type": "string", "enum": ["RollingUpdate", "Recreate"] },
+        "type": { "type": "string", "const": "RollingUpdate" },
         "rollingUpdate": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "maxSurge": { "$ref": "#/definitions/intOrPercentage" },
-            "maxUnavailable": { "$ref": "#/definitions/intOrPercentage" }
-          }
+            "maxUnavailable": { "$ref": "#/definitions/intOrPercentageMax100" }
+          },
+          "required": ["maxSurge", "maxUnavailable"]
         }
       },
-      "required": ["type"],
+      "required": ["type", "rollingUpdate"],
       "allOf": [
         {
-          "if": { "properties": { "type": { "const": "Recreate" } } },
-          "then": { "not": { "required": ["rollingUpdate"] } }
+          "not": {
+            "properties": {
+              "rollingUpdate": {
+                "type": "object",
+                "properties": {
+                  "maxSurge": { "enum": [0, "0%"] },
+                  "maxUnavailable": { "enum": [0, "0%"] }
+                },
+                "required": ["maxSurge", "maxUnavailable"]
+              }
+            },
+            "required": ["rollingUpdate"]
+          }
         }
       ]
     },

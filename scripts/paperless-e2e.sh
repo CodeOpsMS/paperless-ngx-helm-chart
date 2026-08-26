@@ -389,19 +389,25 @@ app_service() {
 verify_candidate_rollout_safety() {
   local deployment
   local hpa
+  local max_surge
+  local max_unavailable
   local replicas
   local strategy
   deployment=$(app_deployment)
   strategy=$(kube get deployment "$deployment" -n "$NAMESPACE" \
     -o jsonpath='{.spec.strategy.type}')
+  max_surge=$(kube get deployment "$deployment" -n "$NAMESPACE" \
+    -o jsonpath='{.spec.strategy.rollingUpdate.maxSurge}')
+  max_unavailable=$(kube get deployment "$deployment" -n "$NAMESPACE" \
+    -o jsonpath='{.spec.strategy.rollingUpdate.maxUnavailable}')
   replicas=$(kube get deployment "$deployment" -n "$NAMESPACE" \
     -o jsonpath='{.spec.replicas}')
   hpa=$(kube get hpa "$deployment" -n "$NAMESPACE" --ignore-not-found -o name)
-  if [[ "$strategy" != "Recreate" || "$replicas" != "1" || -n "$hpa" ]]; then
-    echo "Unsafe candidate rollout state: strategy=${strategy:-missing}, replicas=${replicas:-missing}, hpa=${hpa:-none}" >&2
+  if [[ "$strategy" != "RollingUpdate" || "$max_surge" != "0" || "$max_unavailable" != "100%" || "$replicas" != "1" || -n "$hpa" ]]; then
+    echo "Unsafe candidate rollout state: strategy=${strategy:-missing}, maxSurge=${max_surge:-missing}, maxUnavailable=${max_unavailable:-missing}, replicas=${replicas:-missing}, hpa=${hpa:-none}" >&2
     return 1
   fi
-  echo "Candidate rollout safety verified: Recreate, one replica, HPA disabled"
+  echo "Candidate rollout safety verified: zero surge, full unavailability, one replica, HPA disabled"
 }
 
 wait_for_application() {
@@ -411,6 +417,26 @@ wait_for_application() {
   kube wait pod -n "$NAMESPACE" \
     -l app.kubernetes.io/instance="$RELEASE",app.kubernetes.io/name=paperless-ngx \
     --for=condition=Ready --timeout=40m
+}
+
+wait_for_application_pods_deleted() {
+  local attempt
+  local remaining
+  for attempt in $(seq 1 480); do
+    remaining=$(kube get pod -n "$NAMESPACE" \
+      -l app.kubernetes.io/instance="$RELEASE",app.kubernetes.io/name=paperless-ngx \
+      -o json | jq '[.items[] | select(any(.metadata.ownerReferences[]?; .kind == "ReplicaSet"))] | length')
+    if [[ "$remaining" == "0" ]]; then
+      echo "All Paperless application pods have terminated"
+      return 0
+    fi
+    sleep 5
+  done
+  kube get pod -n "$NAMESPACE" \
+    -l app.kubernetes.io/instance="$RELEASE",app.kubernetes.io/name=paperless-ngx \
+    -o wide >&2
+  echo "Paperless application pods did not terminate after scale-to-zero" >&2
+  return 1
 }
 
 start_port_forward() {
@@ -932,7 +958,9 @@ install_candidate() {
     --timeout 40m \
     --set autoscaling.enabled=false \
     --set replicaCount=1 \
-    --set strategy.type=Recreate \
+    --set strategy.type=RollingUpdate \
+    --set strategy.rollingUpdate.maxSurge=0 \
+    --set-string strategy.rollingUpdate.maxUnavailable=100% \
     "${common_values[@]}"
   verify_candidate_rollout_safety
 }
@@ -998,6 +1026,7 @@ else
   deployment=$(app_deployment)
   kube scale deployment/"$deployment" -n "$NAMESPACE" --replicas=0
   kube rollout status deployment/"$deployment" -n "$NAMESPACE" --timeout=40m
+  wait_for_application_pods_deleted
 
   install_candidate
   wait_for_application

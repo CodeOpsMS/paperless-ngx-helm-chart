@@ -149,9 +149,12 @@ jobs:
           helm template ci-default . \
             --namespace paperless-ngx-ci \
             >/tmp/paperless-default.yaml
-          helm template ci-recreate-clear . \
+          helm template ci-rollout . \
             --show-only templates/deployment.yaml \
-            | grep -Fq '    rollingUpdate: null'
+            >/tmp/paperless-rollout.yaml
+          grep -Fq '    type: RollingUpdate' /tmp/paperless-rollout.yaml
+          grep -Fq '      maxSurge: 0' /tmp/paperless-rollout.yaml
+          grep -Fq '      maxUnavailable: 100%' /tmp/paperless-rollout.yaml
           helm template ci-external . \
             --namespace paperless-ngx-ci \
             --set postgresql.enabled=false \
@@ -293,10 +296,21 @@ jobs:
           expect_failure helm template invalid . \
             --set-string env.PAPERLESS_SEARCH_LANGUAGE=de
           expect_failure helm template invalid . \
-            --set strategy.rollingUpdate.maxSurge=0
+            --set strategy.type=Recreate
           expect_failure helm template invalid . \
             --set strategy.type=RollingUpdate \
             --set-string strategy.rollingUpdate.maxSurge=invalid
+          expect_failure helm template invalid . \
+            --set-string strategy.rollingUpdate.maxSurge=1
+          expect_failure helm template invalid . \
+            --set-string strategy.rollingUpdate.maxUnavailable=101%
+          expect_failure helm template invalid . \
+            --set-string strategy.rollingUpdate.maxSurge=00%
+          expect_failure helm template invalid . \
+            --set-string strategy.rollingUpdate.maxUnavailable=00%
+          expect_failure helm template invalid . \
+            --set strategy.rollingUpdate.maxSurge=0 \
+            --set strategy.rollingUpdate.maxUnavailable=0
           expect_failure helm template invalid . \
             --set-json 'config.oidcProviders={"openid_connect":{"APPS":[]}}' \
             --set-json 'env.PAPERLESS_SOCIALACCOUNT_PROVIDERS={"valueFrom":{"secretKeyRef":{"name":"oidc-secret","key":"providers.json"}}}'

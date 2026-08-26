@@ -200,10 +200,15 @@ chart 0.4.0-experimental.1.
 
 ## Scaling and availability
 
-`replicaCount`, HPA, and RollingUpdate remain configurable. `Recreate` is the
-default strategy so Paperless 2 and 3 cannot overlap during the irreversible
-database migration; use RollingUpdate only as an explicit expert choice after
-the migration has been completed. The chart still runs
+`replicaCount`, HPA, and the RollingUpdate budgets remain configurable. The
+strategy type stays `RollingUpdate` because Helm 4 server-side apply cannot
+safely clear the old `rollingUpdate` field during a live switch to `Recreate`.
+The default (`maxSurge: 0`, `maxUnavailable: 100%`) avoids creating an extra
+application pod. It is not a substitute for the explicit scale-to-zero and
+complete pod-termination wait in the upgrade guide, which prevents Paperless 2
+and 3 from overlapping during the irreversible database migration. This
+disruptive default causes downtime on every rollout until the budgets are
+changed after the migration has been accepted. The chart still runs
 the Paperless web server, consumer, scheduler, and worker processes together in
 one Deployment. Multiple replicas are therefore exposed as an expert option,
 but this all-in-one topology has not been validated as a fully highly available
@@ -381,7 +386,9 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | startupProbe.path | string | `"/"` |  |
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `5` |  |
-| strategy.type | string | `"Recreate"` | Deployment strategy. Recreate prevents Paperless 2 and 3 from running concurrently against the same database during the major-version upgrade. |
+| strategy.rollingUpdate.maxSurge | int | `0` |  |
+| strategy.rollingUpdate.maxUnavailable | string | `"100%"` |  |
+| strategy.type | string | `"RollingUpdate"` | Deployment strategy. Zero surge avoids creating an extra application pod. RollingUpdate is the only supported type because Helm 4 server-side apply cannot safely clear the old rollingUpdate field during a live switch to Recreate. The disruptive defaults cause downtime on every rollout. The Paperless 3 upgrade still requires the documented complete scale-to-zero and wait procedure. |
 | terminationGracePeriodSeconds | int | `60` | Grace period for Paperless workers to stop cleanly. |
 | tests.enabled | bool | `true` | Enable the Helm connectivity test pod. |
 | tests.image.digest | string | `"sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616"` |  |

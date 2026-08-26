@@ -47,11 +47,9 @@ annotations:
     - kind: fixed
       description: Reject PAPERLESS_SEARCH_LANGUAGE while its explicit use prevents Paperless 3.0.5 from starting
     - kind: changed
-      description: Default to Recreate so Paperless 2 and 3 pods cannot overlap during the irreversible database migration
+      description: Use and validate a zero-surge RollingUpdate strategy compatible with Helm 4 server-side apply; the documented complete scale-to-zero procedure remains the major-version migration guard
     - kind: fixed
       description: Restore Secret-backed PAPERLESS_SOCIALACCOUNT_PROVIDERS without exposing OIDC credentials in values
-    - kind: fixed
-      description: Explicitly clear stale RollingUpdate state when Helm 4 switches an existing Deployment to Recreate
   artifacthub.io/images: |
     - name: Paperless-ngx
       image: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
