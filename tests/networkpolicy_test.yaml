@@ -1,0 +1,152 @@
+suite: Paperless network policy
+templates:
+  - templates/networkpolicy.yaml
+tests:
+  - it: permits the internal PostgreSQL and Valkey pods for this release
+    release:
+      name: paperless-netpol
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: web
+        documentIndex: 0
+      - equal:
+          path: spec.egress[0].ports[1].protocol
+          value: TCP
+        documentIndex: 0
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: test
+        documentIndex: 0
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/instance"]
+          value: paperless-netpol
+        documentIndex: 0
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: postgresql
+        documentIndex: 0
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: primary
+        documentIndex: 0
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+        documentIndex: 0
+      - equal:
+          path: spec.egress[2].ports[0].port
+          value: 6379
+        documentIndex: 0
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: test
+        documentIndex: 1
+      - equal:
+          path: spec.egress[0].ports[1].protocol
+          value: TCP
+        documentIndex: 1
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: web
+        documentIndex: 1
+
+  - it: uses explicit rules and omits internal selectors for external services
+    set:
+      networkPolicy:
+        enabled: true
+        egress:
+          database:
+            - ports:
+                - port: 5432
+                  protocol: TCP
+                - port: 6379
+                  protocol: TCP
+              to:
+                - ipBlock:
+                    cidr: 10.0.0.0/8
+      postgresql.enabled: false
+      config.database.host: postgres.example.invalid
+      config.database.existingSecret.name: database-secret
+      valkey.internal: false
+      config.redis.url: redis://valkey.example.invalid:6379/0
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+        documentIndex: 0
+      - equal:
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 10.0.0.0/8
+        documentIndex: 0
+
+  - it: follows dependency name overrides for internal egress selectors
+    set:
+      networkPolicy.enabled: true
+      postgresql.nameOverride: database
+      valkey.nameOverride: broker
+    asserts:
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: database
+        documentIndex: 0
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: broker
+        documentIndex: 0
+
+  - it: follows the PostgreSQL container port for internal egress
+    set:
+      networkPolicy.enabled: true
+      postgresql.containerPorts.postgresql: 5544
+    asserts:
+      - equal:
+          path: spec.egress[1].ports[0].port
+          value: 5544
+        documentIndex: 0
+
+  - it: does not create any egress policy when egress is disabled
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.egress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - lengthEqual:
+          path: spec.policyTypes
+          count: 1
+      - equal:
+          path: spec.policyTypes[0]
+          value: Ingress
+      - notExists:
+          path: spec.egress
+
+  - it: does not require external database egress for SQLite
+    set:
+      networkPolicy.enabled: true
+      tests.enabled: false
+      postgresql.enabled: false
+      config.database.engine: sqlite
+    asserts:
+      - hasDocuments:
+          count: 1
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels["app.kubernetes.io/name"]
+          value: valkey
+
+  - it: keeps the test policy distinct at the Kubernetes name limit
+    set:
+      fullnameOverride: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-test
+        documentIndex: 1

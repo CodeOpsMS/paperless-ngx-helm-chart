@@ -7,10 +7,14 @@
 .gitignore
 .mailmap
 .github/
+.candidate/
 .release-packages/
+_docs.gotmpl
 artifacthub-repo.yml
 renovate.json
+TESTING.md
 scripts/
+tests/*_test.yaml
 .bzr/
 .bzrignore
 .hg/

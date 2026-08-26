@@ -4,17 +4,21 @@ set -euo pipefail
 
 package=${1:?Usage: check-chart-package.sh CHART_PACKAGE}
 chart_name=$(helm show chart "$package" | awk '/^name:/ { print $2 }')
+chart_version=$(helm show chart "$package" | awk '/^version:/ { print $2 }')
 chart_metadata=$(mktemp)
 contents=$(mktemp)
 trap 'rm -f "$chart_metadata" "$contents"' EXIT
 
 test -n "$chart_name"
+test -n "$chart_version"
 test -s "$package"
 helm show chart "$package" >"$chart_metadata"
 tar -tzf "$package" >"$contents"
 
 grep -qx "${chart_name}/NOTICE" "$contents"
 grep -qx "${chart_name}/LICENSES/CodeOpsMS-MIT.txt" "$contents"
+grep -qx "${chart_name}/UPGRADE-0.4.md" "$contents"
+grep -qx "${chart_name}/values.schema.json" "$contents"
 
 if grep -Eq "^${chart_name}/LICENSE([.][^/]*)?$" "$contents"; then
   echo "The packaged chart must not declare a package-wide root license"
@@ -26,8 +30,28 @@ if grep -q 'artifacthub.io/license' "$chart_metadata"; then
   exit 1
 fi
 
+case "$chart_version" in
+  *-*)
+    if ! grep -Fq 'artifacthub.io/prerelease: "true"' "$chart_metadata"; then
+      echo "A prerelease chart must set artifacthub.io/prerelease to true"
+      exit 1
+    fi
+    ;;
+  *)
+    if grep -Fq 'artifacthub.io/prerelease: "true"' "$chart_metadata"; then
+      echo "A stable chart must not be marked as an Artifact Hub prerelease"
+      exit 1
+    fi
+    ;;
+esac
+
 if grep -q "^${chart_name}/.github/" "$contents"; then
   echo "The packaged chart must not contain GitHub workflow files"
+  exit 1
+fi
+
+if grep -Eq "^${chart_name}/\.(candidate|release-packages)/" "$contents"; then
+  echo "The packaged chart must not contain local chart build artifacts"
   exit 1
 fi
 
@@ -41,7 +65,7 @@ if grep -qx "${chart_name}/.mailmap" "$contents"; then
   exit 1
 fi
 
-if grep -Eq "^${chart_name}/scripts/" "$contents"; then
-  echo "The packaged chart must not contain repository-only scripts"
+if grep -Eq "^${chart_name}/(scripts|tests)/" "$contents"; then
+  echo "The packaged chart must not contain repository-only scripts or unit tests"
   exit 1
 fi

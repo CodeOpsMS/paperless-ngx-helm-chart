@@ -1,0 +1,51 @@
+name: Dependabot Auto-Merge
+
+on:
+  pull_request: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Check patch-only auto-merge eligibility
+        id: eligibility
+        env:
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          eligible=false
+          if [[ "$PACKAGE_ECOSYSTEM" == "github_actions" ]] && \
+             [[ "$UPDATE_TYPE" == "version-update:semver-patch" ]]; then
+            case "$DEPENDENCY_NAMES" in
+              actions/checkout|actions/setup-python|actions/upload-artifact)
+                eligible=true
+                ;;
+            esac
+          fi
+          echo "eligible=$eligible" >>"$GITHUB_OUTPUT"
+
+      - name: Auto-approve eligible GitHub Actions updates
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr review --approve "$PR_URL"
+
+      - name: Enable squash auto-merge after required checks
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

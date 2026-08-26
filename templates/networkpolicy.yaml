@@ -11,12 +11,23 @@ spec:
   podSelector:
     matchLabels:
       {{- include "paperless-ngx.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: web
   policyTypes:
     - Ingress
     {{- if .egress.enabled }}
     - Egress
     {{- end }}
   ingress:
+    {{- if $.Values.tests.enabled }}
+    - ports:
+        - port: 8000
+          protocol: TCP
+      from:
+        - podSelector:
+            matchLabels:
+              {{- include "paperless-ngx.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: test
+    {{- end }}
     {{- with .ingress.http }}
     - ports:
         - port: 8000
@@ -40,33 +51,74 @@ spec:
     - ports:
         - port: 53
           protocol: UDP
+        - port: 53
+          protocol: TCP
       to:
         {{- toYaml . | nindent 8 }}
     {{- end }}
     {{- with .database }}
     {{- toYaml . | nindent 4 }}
-    {{- else }}
+    {{- end }}
+    {{- if $.Values.postgresql.enabled }}
     - ports:
-        - port: 5432
+        - port: {{ include "paperless-ngx.postgresqlContainerPort" $ }}
           protocol: TCP
       to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/instance: {{ .Release.Name }}
-              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+              app.kubernetes.io/name: {{ include "paperless-ngx.postgresqlName" $ }}
+              app.kubernetes.io/component: primary
+    {{- end }}
+    {{- if $.Values.valkey.internal }}
     - ports:
         - port: 6379
           protocol: TCP
       to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/instance: {{ .Release.Name }}
-              app.kubernetes.io/name: valkey
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+              app.kubernetes.io/name: {{ include "paperless-ngx.valkeyName" $ }}
     {{- end }}
     {{- with .extra }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
   {{- end }}{{/* end-if egress.enabled */}}
   {{- end }}{{/* end-with .egress */}}
+
+{{- if and $.Values.tests.enabled .egress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-test" (include "paperless-ngx.fullname" $ | trunc 58 | trimSuffix "-") }}
+  labels:
+    {{- include "paperless-ngx.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "paperless-ngx.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: test
+  policyTypes:
+    - Egress
+  egress:
+    {{- with .egress.dns }}
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    - ports:
+        - port: 8000
+          protocol: TCP
+      to:
+        - podSelector:
+            matchLabels:
+              {{- include "paperless-ngx.selectorLabels" $ | nindent 14 }}
+              app.kubernetes.io/component: web
+{{- end }}
 {{- end }}
 {{- end }}

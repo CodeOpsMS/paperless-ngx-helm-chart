@@ -1,15 +1,43 @@
+{{- if .Values.tests.enabled }}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ include "paperless-ngx.fullname" . }}-test-connection"
+  name: {{ printf "%s-test-connection" (include "paperless-ngx.fullname" . | trunc 47 | trimSuffix "-") | quote }}
   labels:
     {{- include "paperless-ngx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
   annotations:
     "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
+  automountServiceAccountToken: false
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: wget
-      image: busybox
-      command: ['wget']
-      args: ['{{ include "paperless-ngx.fullname" . }}:{{ .Values.service.port }}']
+      image: {{ include "paperless-ngx.testImage" . | quote }}
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - wget
+      args:
+        - --spider
+        - --timeout=10
+        - http://{{ include "paperless-ngx.fullname" . }}:{{ .Values.service.port }}{{ .Values.readinessProbe.path }}
+      resources:
+        {{- toYaml .Values.tests.resources | nindent 8 }}
   restartPolicy: Never
+{{- end }}

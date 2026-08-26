@@ -1,3 +1,16 @@
+{{- if and .Values.autoscaling.enabled (gt (int .Values.autoscaling.minReplicas) (int .Values.autoscaling.maxReplicas)) }}
+{{- fail "autoscaling.maxReplicas must be greater than or equal to autoscaling.minReplicas" }}
+{{- end }}
+{{- $cpuTarget := .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- $memoryTarget := .Values.autoscaling.targetMemoryUtilizationPercentage }}
+{{- $resources := default (dict) .Values.resources }}
+{{- $requests := default (dict) (get $resources "requests") }}
+{{- if and .Values.autoscaling.enabled (or $cpuTarget (and (empty $cpuTarget) (empty $memoryTarget))) (empty (get $requests "cpu")) }}
+{{- fail "resources.requests.cpu is required when HPA uses the CPU utilization metric" }}
+{{- end }}
+{{- if and .Values.autoscaling.enabled $memoryTarget (empty (get $requests "memory")) }}
+{{- fail "resources.requests.memory is required when HPA uses the memory utilization metric" }}
+{{- end }}
 {{- if .Values.autoscaling.enabled }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -12,21 +25,23 @@ spec:
     name: {{ include "paperless-ngx.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  {{- if or $cpuTarget $memoryTarget }}
   metrics:
-    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- if $cpuTarget }}
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+          averageUtilization: {{ $cpuTarget }}
     {{- end }}
-    {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- if $memoryTarget }}
     - type: Resource
       resource:
         name: memory
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+          averageUtilization: {{ $memoryTarget }}
     {{- end }}
+  {{- end }}
 {{- end }}
