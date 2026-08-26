@@ -22,7 +22,17 @@ spec:
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   strategy:
-    {{- toYaml .Values.strategy | nindent 4 }}
+    type: {{ .Values.strategy.type }}
+    {{- if eq .Values.strategy.type "Recreate" }}
+    # Explicit null removes a RollingUpdate value previously owned by Helm 4's
+    # server-side apply field manager before changing the strategy type.
+    rollingUpdate: null
+    {{- else }}
+    {{- with .Values.strategy.rollingUpdate }}
+    rollingUpdate:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- end }}
   selector:
     matchLabels:
       {{- include "paperless-ngx.selectorLabels" . | nindent 6 }}

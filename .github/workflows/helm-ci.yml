@@ -149,6 +149,9 @@ jobs:
           helm template ci-default . \
             --namespace paperless-ngx-ci \
             >/tmp/paperless-default.yaml
+          helm template ci-recreate-clear . \
+            --show-only templates/deployment.yaml \
+            | grep -Fq '    rollingUpdate: null'
           helm template ci-external . \
             --namespace paperless-ngx-ci \
             --set postgresql.enabled=false \
