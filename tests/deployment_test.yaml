@@ -55,7 +55,7 @@ tests:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
           value: /
 
-  - it: preserves the existing scaling and RollingUpdate interface
+  - it: uses Recreate to prevent mixed-major-version overlap
     set:
       replicaCount: 3
     asserts:
@@ -64,10 +64,26 @@ tests:
           value: 3
       - equal:
           path: spec.strategy.type
-          value: RollingUpdate
+          value: Recreate
       - equal:
           path: spec.template.spec.terminationGracePeriodSeconds
           value: 60
+
+  - it: allows an explicit RollingUpdate strategy after migration
+    set:
+      strategy.type: RollingUpdate
+      strategy.rollingUpdate.maxSurge: 0
+      strategy.rollingUpdate.maxUnavailable: 1
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: 0
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 1
 
   - it: maps all supported external secrets to Kubernetes EnvVars
     set:
@@ -130,6 +146,25 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name
           value: smtp-secret
+
+  - it: preserves OIDC provider configuration in an external Secret
+    set:
+      env:
+        PAPERLESS_SOCIALACCOUNT_PROVIDERS:
+          valueFrom:
+            secretKeyRef:
+              name: paperless-oidc
+              key: providers.json
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: PAPERLESS_SOCIALACCOUNT_PROVIDERS
+      - equal:
+          path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name
+          value: paperless-oidc
+      - equal:
+          path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.key
+          value: providers.json
 
   - it: references the exact existing PostgreSQL user password key
     set:

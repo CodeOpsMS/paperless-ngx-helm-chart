@@ -7,7 +7,7 @@ type: application
 kubeVersion: ">=1.34.0-0"
 icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.4.0"
+version: "0.4.0-experimental.1"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "3.0.5"
 keywords:
@@ -25,8 +25,11 @@ sources:
   - https://github.com/paperless-ngx/paperless-ngx
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 annotations:
+  artifacthub.io/prerelease: "true"
   artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
+    - kind: changed
+      description: Publish Paperless-ngx 3 as an explicitly experimental chart alongside stable chart 0.3.23
     - kind: security
       description: Include security fixes shipped in Paperless-ngx 3.0.0 and Valkey 9.0.3, carried forward by Valkey 9.0.5
     - kind: changed
@@ -37,13 +40,23 @@ annotations:
       description: Use a stable upstream icon URL and migration-safe startup probes
     - kind: fixed
       description: Replace Secret-derived pod annotation hashes with an explicit non-sensitive rollout revision
+    - kind: fixed
+      description: Refresh the immutable Valkey 9.0.5 manifest digest after the upstream tag was republished
+    - kind: fixed
+      description: Restore supported dependency registry and OpenShift global options under strict values validation
+    - kind: fixed
+      description: Reject PAPERLESS_SEARCH_LANGUAGE while its explicit use prevents Paperless 3.0.5 from starting
+    - kind: changed
+      description: Default to Recreate so Paperless 2 and 3 pods cannot overlap during the irreversible database migration
+    - kind: fixed
+      description: Restore Secret-backed PAPERLESS_SOCIALACCOUNT_PROVIDERS without exposing OIDC credentials in values
   artifacthub.io/images: |
     - name: Paperless-ngx
       image: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
     - name: PostgreSQL
       image: docker.io/bitnamilegacy/postgresql@sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d
     - name: Valkey
-      image: docker.io/valkey/valkey:9.0.5@sha256:0381fe6dfb72c73580a43b0510a6b31909a9650ac6c7e4946cf75c074a658357
+      image: docker.io/valkey/valkey:9.0.5@sha256:2437dbc85bb67005fa7db135dfbc45075b800f4afa1ab2a301e3b878b0c273e2
     - name: Helm test
       image: docker.io/library/busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
   artifacthub.io/links: |

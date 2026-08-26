@@ -386,6 +386,24 @@ app_service() {
     -o jsonpath='{.items[0].metadata.name}'
 }
 
+verify_candidate_rollout_safety() {
+  local deployment
+  local hpa
+  local replicas
+  local strategy
+  deployment=$(app_deployment)
+  strategy=$(kube get deployment "$deployment" -n "$NAMESPACE" \
+    -o jsonpath='{.spec.strategy.type}')
+  replicas=$(kube get deployment "$deployment" -n "$NAMESPACE" \
+    -o jsonpath='{.spec.replicas}')
+  hpa=$(kube get hpa "$deployment" -n "$NAMESPACE" --ignore-not-found -o name)
+  if [[ "$strategy" != "Recreate" || "$replicas" != "1" || -n "$hpa" ]]; then
+    echo "Unsafe candidate rollout state: strategy=${strategy:-missing}, replicas=${replicas:-missing}, hpa=${hpa:-none}" >&2
+    return 1
+  fi
+  echo "Candidate rollout safety verified: Recreate, one replica, HPA disabled"
+}
+
 wait_for_application() {
   local deployment
   deployment=$(app_deployment)
@@ -912,7 +930,11 @@ install_candidate() {
     --reset-values \
     --wait \
     --timeout 40m \
+    --set autoscaling.enabled=false \
+    --set replicaCount=1 \
+    --set strategy.type=Recreate \
     "${common_values[@]}"
+  verify_candidate_rollout_safety
 }
 
 install_upgrade_base() {

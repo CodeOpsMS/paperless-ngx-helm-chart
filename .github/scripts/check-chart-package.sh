@@ -4,11 +4,13 @@ set -euo pipefail
 
 package=${1:?Usage: check-chart-package.sh CHART_PACKAGE}
 chart_name=$(helm show chart "$package" | awk '/^name:/ { print $2 }')
+chart_version=$(helm show chart "$package" | awk '/^version:/ { print $2 }')
 chart_metadata=$(mktemp)
 contents=$(mktemp)
 trap 'rm -f "$chart_metadata" "$contents"' EXIT
 
 test -n "$chart_name"
+test -n "$chart_version"
 test -s "$package"
 helm show chart "$package" >"$chart_metadata"
 tar -tzf "$package" >"$contents"
@@ -27,6 +29,21 @@ if grep -q 'artifacthub.io/license' "$chart_metadata"; then
   echo "The chart must not declare a package-wide Artifact Hub license"
   exit 1
 fi
+
+case "$chart_version" in
+  *-*)
+    if ! grep -Fq 'artifacthub.io/prerelease: "true"' "$chart_metadata"; then
+      echo "A prerelease chart must set artifacthub.io/prerelease to true"
+      exit 1
+    fi
+    ;;
+  *)
+    if grep -Fq 'artifacthub.io/prerelease: "true"' "$chart_metadata"; then
+      echo "A stable chart must not be marked as an Artifact Hub prerelease"
+      exit 1
+    fi
+    ;;
+esac
 
 if grep -q "^${chart_name}/.github/" "$contents"; then
   echo "The packaged chart must not contain GitHub workflow files"

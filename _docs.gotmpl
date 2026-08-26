@@ -29,7 +29,11 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 > It is not an official Paperless-ngx chart and does not receive official
 > support from the Paperless-ngx project.
 
-This chart deploys Paperless-ngx {{ template "chart.appVersion" . }} with optional PostgreSQL and
+> **Experimental preview:** Chart `{{ template "chart.version" . }}` deploys
+> Paperless-ngx {{ template "chart.appVersion" . }} and is not the stable default. Chart `0.3.23`
+> with Paperless-ngx `2.20.15` remains the production/stable release.
+
+This experimental chart deploys Paperless-ngx {{ template "chart.appVersion" . }} with optional PostgreSQL and
 Valkey dependencies. The default deployment uses PostgreSQL 17.6 and Valkey
 {{ template "value.valkey.appVersion" . }}. All default container images are pinned to immutable multi-platform
 digests.
@@ -54,6 +58,10 @@ digests.
 - An x86-64-v2 capable CPU on amd64, or a supported arm64 node
 - Persistent storage for production use
 
+Kubernetes 1.34 is the chart's intentional maintained-and-tested support floor,
+not a claim that every rendered Kubernetes API first appeared in 1.34. Older
+clusters are rejected because they are outside this release's CI/support matrix.
+
 The tested dependency versions for chart {{ template "chart.version" . }} are:
 
 | Component | Chart | Application |
@@ -71,17 +79,29 @@ dependency to PostgreSQL 18 is intentionally outside this migration release.
 
 ## Installation
 
-### Helm repository
+### Stable Helm repository install (Paperless 2)
 
 ```bash
 helm repo add paperless https://codeopsms.github.io/paperless-ngx-helm-chart/
 helm repo update
 helm install paperless-ngx paperless/paperless-ngx \
+  --version 0.3.23 \
   --namespace paperless-ngx \
   --create-namespace
 ```
 
-### OCI registry
+Helm ignores prereleases during normal version resolution, so an install without
+`--version` also remains on stable chart `0.3.23`. Select the experimental chart
+only by its exact version:
+
+```bash
+helm install paperless-ngx paperless/paperless-ngx \
+  --version {{ template "chart.version" . }} \
+  --namespace paperless-ngx-experimental \
+  --create-namespace
+```
+
+### Experimental OCI install (Paperless 3)
 
 ```bash
 helm install paperless-ngx \
@@ -96,11 +116,12 @@ GHCR keeps both published chart versions addressable by version:
 | Chart version | Paperless-ngx | Purpose |
 |---------------|---------------|---------|
 | `0.3.23` | `2.20.15` | Last Paperless 2 release |
-| `{{ template "chart.version" . }}` | `{{ template "chart.appVersion" . }}` | Paperless 3 release |
+| `{{ template "chart.version" . }}` | `{{ template "chart.appVersion" . }}` | Experimental Paperless 3 preview |
 
 Chart 0.3.23 remains available for existing Paperless 2 installations, but it
 is a historical release and does not receive Paperless 3 fixes or current
-security updates.
+security updates. It nevertheless remains the stable/default channel while the
+Paperless 3 chart is experimental.
 
 Use distinct release names and namespaces to run both versions in parallel:
 
@@ -125,6 +146,11 @@ PostgreSQL database, Valkey state, or Paperless data/media PVCs.
 For production, store `PAPERLESS_SECRET_KEY`, database credentials, and any
 external broker URL in Kubernetes Secrets and reference them through
 `config.*.existingSecret`.
+
+OIDC provider JSON commonly contains client credentials. Reference an existing
+Secret with `env.PAPERLESS_SOCIALACCOUNT_PROVIDERS.valueFrom.secretKeyRef` rather
+than putting it inline in `config.oidcProviders`; the schema rejects configuring
+both sources simultaneously.
 
 The Deployment never publishes hashes derived from Secret values in pod
 annotations. Increment the non-sensitive `config.secretRevision` whenever a
@@ -173,7 +199,7 @@ changed after registration.
 
 ## Upgrading from chart 0.3.x
 
-Chart {{ template "chart.version" . }} is a breaking upgrade from Paperless-ngx 2.20.15 to {{ template "chart.appVersion" . }}. Do not
+Experimental chart {{ template "chart.version" . }} is a breaking upgrade from Paperless-ngx 2.20.15 to {{ template "chart.appVersion" . }}. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
 rely on `helm rollback` after the database migration has run.
 
@@ -187,7 +213,10 @@ chart {{ template "chart.version" . }}.
 
 ## Scaling and availability
 
-`replicaCount`, HPA, and RollingUpdate remain configurable. The chart still runs
+`replicaCount`, HPA, and RollingUpdate remain configurable. `Recreate` is the
+default strategy so Paperless 2 and 3 cannot overlap during the irreversible
+database migration; use RollingUpdate only as an explicit expert choice after
+the migration has been completed. The chart still runs
 the Paperless web server, consumer, scheduler, and worker processes together in
 one Deployment. Multiple replicas are therefore exposed as an expert option,
 but this all-in-one topology has not been validated as a fully highly available
@@ -215,12 +244,12 @@ on Kubernetes 1.34-1.36 and Paperless 2.20.15-to-{{ template "chart.appVersion" 
 | Paperless major | Requires a manually prepared migration PR |
 | PostgreSQL/Valkey charts | Renovate opens separate review PRs |
 | GitHub-owned Actions patch | A small allowlist may auto-merge after required checks; all other updates require review |
-| Releases | A successful `main` CI run promotes its exact tested candidate |
+| Releases | A successful `main` CI run promotes its exact tested candidate; prerelease charts stay non-latest and are marked experimental |
 
 GitHub Pages is active. The Pages healthcheck verifies Artifact Hub repository
 metadata and byte-identical SHA-256 chart packages across Pages, GitHub
-Releases, and anonymous OCI access every day. It checks both the latest release
-and the historical 0.3.23 baseline.
+Releases, and anonymous OCI access every day. It checks the latest stable
+release, the current experimental release, and the historical 0.3.23 baseline.
 
 ## License and provenance
 

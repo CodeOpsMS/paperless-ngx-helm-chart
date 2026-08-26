@@ -14,7 +14,11 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 > It is not an official Paperless-ngx chart and does not receive official
 > support from the Paperless-ngx project.
 
-This chart deploys Paperless-ngx 3.0.5 with optional PostgreSQL and
+> **Experimental preview:** Chart `0.4.0-experimental.1` deploys
+> Paperless-ngx 3.0.5 and is not the stable default. Chart `0.3.23`
+> with Paperless-ngx `2.20.15` remains the production/stable release.
+
+This experimental chart deploys Paperless-ngx 3.0.5 with optional PostgreSQL and
 Valkey dependencies. The default deployment uses PostgreSQL 17.6 and Valkey
 9.0.5. All default container images are pinned to immutable multi-platform
 digests.
@@ -41,7 +45,11 @@ digests.
 - An x86-64-v2 capable CPU on amd64, or a supported arm64 node
 - Persistent storage for production use
 
-The tested dependency versions for chart 0.4.0 are:
+Kubernetes 1.34 is the chart's intentional maintained-and-tested support floor,
+not a claim that every rendered Kubernetes API first appeared in 1.34. Older
+clusters are rejected because they are outside this release's CI/support matrix.
+
+The tested dependency versions for chart 0.4.0-experimental.1 are:
 
 | Component | Chart | Application |
 |-----------|-------|-------------|
@@ -58,22 +66,34 @@ dependency to PostgreSQL 18 is intentionally outside this migration release.
 
 ## Installation
 
-### Helm repository
+### Stable Helm repository install (Paperless 2)
 
 ```bash
 helm repo add paperless https://codeopsms.github.io/paperless-ngx-helm-chart/
 helm repo update
 helm install paperless-ngx paperless/paperless-ngx \
+  --version 0.3.23 \
   --namespace paperless-ngx \
   --create-namespace
 ```
 
-### OCI registry
+Helm ignores prereleases during normal version resolution, so an install without
+`--version` also remains on stable chart `0.3.23`. Select the experimental chart
+only by its exact version:
+
+```bash
+helm install paperless-ngx paperless/paperless-ngx \
+  --version 0.4.0-experimental.1 \
+  --namespace paperless-ngx-experimental \
+  --create-namespace
+```
+
+### Experimental OCI install (Paperless 3)
 
 ```bash
 helm install paperless-ngx \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0 \
+  --version 0.4.0-experimental.1 \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -83,11 +103,12 @@ GHCR keeps both published chart versions addressable by version:
 | Chart version | Paperless-ngx | Purpose |
 |---------------|---------------|---------|
 | `0.3.23` | `2.20.15` | Last Paperless 2 release |
-| `0.4.0` | `3.0.5` | Paperless 3 release |
+| `0.4.0-experimental.1` | `3.0.5` | Experimental Paperless 3 preview |
 
 Chart 0.3.23 remains available for existing Paperless 2 installations, but it
 is a historical release and does not receive Paperless 3 fixes or current
-security updates.
+security updates. It nevertheless remains the stable/default channel while the
+Paperless 3 chart is experimental.
 
 Use distinct release names and namespaces to run both versions in parallel:
 
@@ -100,7 +121,7 @@ helm install paperless-v2 \
 
 helm install paperless-v3 \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0 \
+  --version 0.4.0-experimental.1 \
   --namespace paperless-v3 \
   --create-namespace
 ```
@@ -112,6 +133,11 @@ PostgreSQL database, Valkey state, or Paperless data/media PVCs.
 For production, store `PAPERLESS_SECRET_KEY`, database credentials, and any
 external broker URL in Kubernetes Secrets and reference them through
 `config.*.existingSecret`.
+
+OIDC provider JSON commonly contains client credentials. Reference an existing
+Secret with `env.PAPERLESS_SOCIALACCOUNT_PROVIDERS.valueFrom.secretKeyRef` rather
+than putting it inline in `config.oidcProviders`; the schema rejects configuring
+both sources simultaneously.
 
 The Deployment never publishes hashes derived from Secret values in pod
 annotations. Increment the non-sensitive `config.secretRevision` whenever a
@@ -160,7 +186,7 @@ changed after registration.
 
 ## Upgrading from chart 0.3.x
 
-Chart 0.4.0 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.0.5. Do not
+Experimental chart 0.4.0-experimental.1 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.0.5. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
 rely on `helm rollback` after the database migration has run.
 
@@ -170,11 +196,14 @@ procedure, controlled application shutdown, validation, and recovery steps.
 
 PostgreSQL remains at 17.6, while Valkey is updated within major version 9 from
 9.0.2 to 9.0.5. No database-engine or broker major migration is performed by
-chart 0.4.0.
+chart 0.4.0-experimental.1.
 
 ## Scaling and availability
 
-`replicaCount`, HPA, and RollingUpdate remain configurable. The chart still runs
+`replicaCount`, HPA, and RollingUpdate remain configurable. `Recreate` is the
+default strategy so Paperless 2 and 3 cannot overlap during the irreversible
+database migration; use RollingUpdate only as an explicit expert choice after
+the migration has been completed. The chart still runs
 the Paperless web server, consumer, scheduler, and worker processes together in
 one Deployment. Multiple replicas are therefore exposed as an expert option,
 but this all-in-one topology has not been validated as a fully highly available
@@ -202,12 +231,12 @@ on Kubernetes 1.34-1.36 and Paperless 2.20.15-to-3.0.5 upgrades across Helm 3 an
 | Paperless major | Requires a manually prepared migration PR |
 | PostgreSQL/Valkey charts | Renovate opens separate review PRs |
 | GitHub-owned Actions patch | A small allowlist may auto-merge after required checks; all other updates require review |
-| Releases | A successful `main` CI run promotes its exact tested candidate |
+| Releases | A successful `main` CI run promotes its exact tested candidate; prerelease charts stay non-latest and are marked experimental |
 
 GitHub Pages is active. The Pages healthcheck verifies Artifact Hub repository
 metadata and byte-identical SHA-256 chart packages across Pages, GitHub
-Releases, and anonymous OCI access every day. It checks both the latest release
-and the historical 0.3.23 baseline.
+Releases, and anonymous OCI access every day. It checks the latest stable
+release, the current experimental release, and the historical 0.3.23 baseline.
 
 ## License and provenance
 
@@ -256,7 +285,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | config.database.password | string | `""` | External database password. Set exactly one of this value and config.database.existingSecret.name for a non-SQLite external database. |
 | config.database.port | string | `nil` | Database port. Empty lets Paperless select the engine default: 5432 for PostgreSQL or 3306 for MariaDB. |
 | config.database.user | string | `"paperless"` | External database user. Bundled database identity comes from postgresql.auth. |
-| config.oidcProviders | string | `nil` | django-allauth provider configuration serialized as JSON. |
+| config.oidcProviders | string | `nil` | Inline django-allauth provider configuration serialized as JSON. This may contain client credentials; for production prefer a structured env.PAPERLESS_SOCIALACCOUNT_PROVIDERS.valueFrom Secret reference. Do not configure both sources. |
 | config.redis.existingSecret.name | string | `""` | Existing Secret containing the external broker URL. |
 | config.redis.existingSecret.urlKey | string | `"url"` | Key in the existing Secret. |
 | config.redis.prefix | string | `""` |  |
@@ -269,10 +298,13 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | env.PAPERLESS_ENABLE_FLOWER | bool | `true` | start service for monitor background jobs e.g. for prometheus (example value for env) |
 | env.PAPERLESS_USE_X_FORWARD_HOST | bool | `true` | correct ip-address by X-Forwarded-For (example value for env) |
 | fullnameOverride | string | `""` |  |
+| global.compatibility.openshift.adaptSecurityContext | string | `"auto"` | Adapt the PostgreSQL dependency security context for OpenShift SCCs. |
 | global.defaultStorageClass | string | `""` | Global default StorageClass for dependency PVCs. |
 | global.image.pullPolicy | string | `nil` | if set it will overwrite all pullPolicy |
 | global.image.registry | string | `nil` | if set it will overwrite all registry entries |
 | global.imagePullSecrets | list | `[]` | Global image pull secret names for the PostgreSQL and Valkey dependencies. |
+| global.imageRegistry | string | `""` | Global registry override used by the PostgreSQL and Valkey dependencies. Use global.image.registry for the Paperless image. |
+| global.security.allowInsecureImages | bool | `false` | Allow the PostgreSQL dependency to use an image outside its recognized list. |
 | global.storageClass | string | `""` | Deprecated dependency StorageClass alias; use global.defaultStorageClass. |
 | grafana.dashboards.annotations | object | `{}` |  |
 | grafana.dashboards.enabled | bool | `false` |  |
@@ -349,7 +381,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | startupProbe.path | string | `"/"` |  |
 | startupProbe.periodSeconds | int | `10` |  |
 | startupProbe.timeoutSeconds | int | `5` |  |
-| strategy.type | string | `"RollingUpdate"` | Deployment strategy. RollingUpdate preserves the existing scaling behavior. |
+| strategy.type | string | `"Recreate"` | Deployment strategy. Recreate prevents Paperless 2 and 3 from running concurrently against the same database during the major-version upgrade. |
 | terminationGracePeriodSeconds | int | `60` | Grace period for Paperless workers to stop cleanly. |
 | tests.enabled | bool | `true` | Enable the Helm connectivity test pod. |
 | tests.image.digest | string | `"sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616"` |  |
@@ -365,7 +397,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | valkey.dataStorage.className | string | `""` |  |
 | valkey.dataStorage.keepPvc | bool | `true` |  |
 | valkey.dbid | int | `0` | Database ID for non-default database |
-| valkey.image.tag | string | `"9.0.5@sha256:0381fe6dfb72c73580a43b0510a6b31909a9650ac6c7e4946cf75c074a658357"` |  |
+| valkey.image.tag | string | `"9.0.5@sha256:2437dbc85bb67005fa7db135dfbc45075b800f4afa1ab2a301e3b878b0c273e2"` |  |
 | valkey.internal | bool | `true` |  |
 | valkey.service.port | int | `6379` | Internal Valkey service port. The bundled chart currently requires 6379. |
 | valkey.tls.enabled | bool | `false` | TLS is unsupported for the bundled broker. Disable the bundled broker and configure a rediss:// URL through config.redis.existingSecret. |

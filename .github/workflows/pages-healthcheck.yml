@@ -35,6 +35,14 @@ jobs:
           oci_repository="oci://ghcr.io/${repo_owner}/helm-charts/paperless-ngx"
           baseline_version=0.3.23
           baseline_sha=6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
+          source_version=$(helm show chart . | awk '/^version:/ { print $2; exit }')
+          source_prerelease_annotation=$(helm show chart . | awk '
+            $1 == "artifacthub.io/prerelease:" {
+              gsub(/"/, "", $2)
+              print $2
+              exit
+            }
+          ')
           check_dir=$(mktemp -d)
           registry_dir=$(mktemp -d)
           cleanup() {
@@ -60,6 +68,8 @@ jobs:
           helm repo update paperless
           published_version=$(helm search repo paperless/paperless-ngx --versions --output json \
             | jq -r '.[0].version // empty')
+          development_version=$(helm search repo paperless/paperless-ngx --versions --devel --output json \
+            | jq -r '.[0].version // empty')
 
           release_json=$(curl --fail --silent --show-error --location --retry 3 \
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -68,9 +78,33 @@ jobs:
           latest_tag=$(jq -r '.tag_name // empty' <<< "$release_json")
           latest_version=${latest_tag#paperless-ngx-}
 
-          if [ -z "$published_version" ] || [ "$published_version" != "$latest_version" ]; then
+          if [[ -z "$published_version" || "$published_version" != "$latest_version" ]]; then
             echo "Published index is stale: index=${published_version:-missing}, release=${latest_version:-missing}"
             exit 1
+          fi
+
+          if [[ "$source_version" == *-* ]]; then
+            if [[ "$source_prerelease_annotation" != "true" ]]; then
+              echo "::error::Prerelease chart ${source_version} lacks the Artifact Hub prerelease annotation"
+              exit 1
+            fi
+            if [[ "$published_version" != "$baseline_version" || "$latest_version" != "$baseline_version" ]]; then
+              echo "::error::Stable default must remain ${baseline_version} during the experimental release"
+              exit 1
+            fi
+            if [[ "$development_version" != "$source_version" ]]; then
+              echo "::error::Helm --devel resolves ${development_version:-missing}, expected ${source_version}"
+              exit 1
+            fi
+          else
+            if [[ "$source_prerelease_annotation" == "true" ]]; then
+              echo "::error::Stable chart ${source_version} is marked as an Artifact Hub prerelease"
+              exit 1
+            fi
+            if [[ "$published_version" != "$source_version" || "$development_version" != "$source_version" ]]; then
+              echo "::error::Stable source, default, and --devel versions do not match"
+              exit 1
+            fi
           fi
 
           pull_oci_anonymously() {
@@ -99,6 +133,7 @@ jobs:
 
           verify_published_version() {
             local version=$1
+            local expected_prerelease=$2
             local version_dir="${check_dir}/${version}"
             local pages_dir="${version_dir}/pages"
             local release_dir="${version_dir}/release"
@@ -108,7 +143,19 @@ jobs:
             local pages_sha
             local release_sha
             local oci_sha
+            local release_metadata
+            local actual_prerelease
             mkdir -p "$pages_dir" "$release_dir" "$oci_dir"
+
+            release_metadata=$(curl --fail --silent --show-error --location --retry 3 \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/paperless-ngx-${version}")
+            actual_prerelease=$(jq -r '.prerelease' <<<"$release_metadata")
+            if [[ "$actual_prerelease" != "$expected_prerelease" ]]; then
+              echo "::error::GitHub release ${version} prerelease=${actual_prerelease}, expected ${expected_prerelease}"
+              return 1
+            fi
 
             helm pull paperless/paperless-ngx \
               --version "$version" \
@@ -136,7 +183,7 @@ jobs:
             pages_sha=$(sha256sum "${pages_dir}/${package}" | awk '{ print $1 }')
             release_sha=$(sha256sum "${release_dir}/${package}" | awk '{ print $1 }')
             oci_sha=$(sha256sum "${oci_dir}/${package}" | awk '{ print $1 }')
-            if [[ "$pages_sha" != "$release_sha" || "$pages_sha" != "$oci_sha" ]]; then
+            if ! [[ "$pages_sha" == "$release_sha" && "$pages_sha" == "$oci_sha" ]]; then
               echo "::error::Published chart ${version} differs across Pages, GitHub Releases, and OCI"
               echo "pages=${pages_sha}"
               echo "release=${release_sha}"
@@ -152,9 +199,16 @@ jobs:
             echo "Verified paperless-ngx ${version} across Pages, Releases, and anonymous OCI: ${pages_sha}"
           }
 
-          verify_published_version "$latest_version"
-          if [[ "$latest_version" != "$baseline_version" ]]; then
-            verify_published_version "$baseline_version"
+          verify_published_version "$latest_version" false
+          if [[ "$source_version" != "$latest_version" ]]; then
+            if [[ "$source_version" == *-* ]]; then
+              verify_published_version "$source_version" true
+            else
+              verify_published_version "$source_version" false
+            fi
+          fi
+          if [[ "$baseline_version" != "$latest_version" && "$baseline_version" != "$source_version" ]]; then
+            verify_published_version "$baseline_version" false
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

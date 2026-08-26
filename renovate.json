@@ -30,7 +30,7 @@
   ],
   "packageRules": [
     {
-      "description": "Update Helm chart dependencies and release them as chart patch versions",
+      "description": "Keep Helm dependency updates on the experimental chart prerelease line",
       "matchManagers": [
         "helmv3"
       ],
@@ -38,19 +38,19 @@
         "Chart.yaml"
       ],
       "rangeStrategy": "bump",
-      "bumpVersion": "patch",
+      "bumpVersion": "prerelease",
       "semanticCommitType": "chore",
       "semanticCommitScope": "deps"
     },
     {
-      "description": "Use chart minor releases for major Helm dependency updates",
+      "description": "Keep major Helm dependency updates experimental until chart 0.4 is promoted",
       "matchManagers": [
         "helmv3"
       ],
       "matchUpdateTypes": [
         "major"
       ],
-      "bumpVersion": "minor"
+      "bumpVersion": "prerelease"
     },
     {
       "description": "Keep Helm 3 checks on the Helm 3 release line",

@@ -139,6 +139,12 @@
         { "type": "number", "exclusiveMinimum": 0 }
       ]
     },
+    "intOrPercentage": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "string", "pattern": "^[0-9]+%?$" }
+      ]
+    },
     "postgresqlAuth": {
       "type": "object",
       "additionalProperties": true,
@@ -169,6 +175,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "imageRegistry": { "type": "string" },
         "imagePullSecrets": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
@@ -176,6 +183,32 @@
         },
         "defaultStorageClass": { "type": "string" },
         "storageClass": { "type": "string" },
+        "security": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowInsecureImages": { "type": "boolean" }
+          },
+          "required": ["allowInsecureImages"]
+        },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "openshift": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "adaptSecurityContext": {
+                  "type": "string",
+                  "enum": ["auto", "force", "disabled"]
+                }
+              },
+              "required": ["adaptSecurityContext"]
+            }
+          },
+          "required": ["openshift"]
+        },
         "image": {
           "type": "object",
           "additionalProperties": false,
@@ -252,9 +285,22 @@
       "additionalProperties": false,
       "properties": {
         "type": { "type": "string", "enum": ["RollingUpdate", "Recreate"] },
-        "rollingUpdate": { "type": "object" }
+        "rollingUpdate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxSurge": { "$ref": "#/definitions/intOrPercentage" },
+            "maxUnavailable": { "$ref": "#/definitions/intOrPercentage" }
+          }
+        }
       },
-      "required": ["type"]
+      "required": ["type"],
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "Recreate" } } },
+          "then": { "not": { "required": ["rollingUpdate"] } }
+        }
+      ]
     },
     "progressDeadlineSeconds": { "type": "integer", "minimum": 1800 },
     "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
@@ -345,12 +391,12 @@
             "PAPERLESS_DBPASS",
             "PAPERLESS_DB_OPTIONS",
             "PAPERLESS_APPS",
-            "PAPERLESS_SOCIALACCOUNT_PROVIDERS",
             "PAPERLESS_CONSUMER_POLLING",
             "PAPERLESS_CONSUMER_INOTIFY_DELAY",
             "PAPERLESS_CONSUMER_POLLING_DELAY",
             "PAPERLESS_CONSUMER_POLLING_RETRY_COUNT",
             "PAPERLESS_CONSUMER_BARCODE_SCANNER",
+            "PAPERLESS_SEARCH_LANGUAGE",
             "PAPERLESS_DBSSLMODE",
             "PAPERLESS_DBSSLROOTCERT",
             "PAPERLESS_DBSSLCERT",
@@ -629,6 +675,22 @@
     }
   },
   "allOf": [
+    {
+      "not": {
+        "properties": {
+          "config": {
+            "properties": {
+              "oidcProviders": { "type": ["object", "array"] }
+            },
+            "required": ["oidcProviders"]
+          },
+          "env": {
+            "required": ["PAPERLESS_SOCIALACCOUNT_PROVIDERS"]
+          }
+        },
+        "required": ["config", "env"]
+      }
+    },
     {
       "if": {
         "properties": {

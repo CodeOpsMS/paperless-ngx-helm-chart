@@ -1,10 +1,20 @@
 global:
+  # -- Global registry override used by the PostgreSQL and Valkey dependencies.
+  # Use global.image.registry for the Paperless image.
+  imageRegistry: ""
   # -- Global image pull secret names for the PostgreSQL and Valkey dependencies.
   imagePullSecrets: []
   # -- Global default StorageClass for dependency PVCs.
   defaultStorageClass: ""
   # -- Deprecated dependency StorageClass alias; use global.defaultStorageClass.
   storageClass: ""
+  security:
+    # -- Allow the PostgreSQL dependency to use an image outside its recognized list.
+    allowInsecureImages: false
+  compatibility:
+    openshift:
+      # -- Adapt the PostgreSQL dependency security context for OpenShift SCCs.
+      adaptSecurityContext: auto
   image:
     # -- if set it will overwrite all registry entries
     registry:
@@ -67,8 +77,9 @@ securityContext: {}
   # runAsUser: 1000
 
 strategy:
-  # -- Deployment strategy. RollingUpdate preserves the existing scaling behavior.
-  type: RollingUpdate
+  # -- Deployment strategy. Recreate prevents Paperless 2 and 3 from running
+  # concurrently against the same database during the major-version upgrade.
+  type: Recreate
 
 # -- Deadline for a Deployment rollout. The default leaves five minutes of
 # headroom beyond the 30-minute startup probe window used for migrations.
@@ -127,7 +138,10 @@ config:
     # -- Engine-specific Paperless 3 database options, for example
     # sslmode=require,pool.max_size=5 for PostgreSQL or timeout=20 for SQLite.
     options: ""
-  # -- django-allauth provider configuration serialized as JSON.
+  # -- Inline django-allauth provider configuration serialized as JSON. This
+  # may contain client credentials; for production prefer a structured
+  # env.PAPERLESS_SOCIALACCOUNT_PROVIDERS.valueFrom Secret reference. Do not
+  # configure both sources.
   oidcProviders: null
 
 env:
@@ -141,6 +155,12 @@ env:
   #     secretKeyRef:
   #       name: "secret"
   #       key: "key"
+  # -- Keep OIDC provider JSON in an existing Secret for production.
+  # PAPERLESS_SOCIALACCOUNT_PROVIDERS:
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: "paperless-oidc"
+  #       key: "providers.json"
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -378,7 +398,7 @@ valkey:
     port: 6379
 
   image:
-    tag: "9.0.5@sha256:0381fe6dfb72c73580a43b0510a6b31909a9650ac6c7e4946cf75c074a658357"
+    tag: "9.0.5@sha256:2437dbc85bb67005fa7db135dfbc45075b800f4afa1ab2a301e3b878b0c273e2"
 
   dataStorage:
     className: ""

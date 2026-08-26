@@ -12,7 +12,6 @@ on:
 concurrency:
   group: release-helm-chart
   cancel-in-progress: false
-  queue: max
 
 permissions:
   actions: read
@@ -86,6 +85,11 @@ jobs:
           test "$chart_name" = "$source_name"
           test "$chart_version" = "$source_version"
           test "$app_version" = "$source_app_version"
+          if [[ "$chart_version" == *-* ]]; then
+            chart_prerelease=true
+          else
+            chart_prerelease=false
+          fi
 
           helm lint --strict "$package"
           helm template release-validation "$package" \
@@ -96,10 +100,13 @@ jobs:
           package_sha=$(sha256sum "$package" | awk '{ print $1 }')
           echo "Promoting tested candidate SHA-256: ${package_sha}"
 
-          echo "name=$chart_name" >>"$GITHUB_OUTPUT"
-          echo "version=$chart_version" >>"$GITHUB_OUTPUT"
-          echo "package=$package" >>"$GITHUB_OUTPUT"
-          echo "sha256=$package_sha" >>"$GITHUB_OUTPUT"
+          {
+            echo "name=$chart_name"
+            echo "version=$chart_version"
+            echo "package=$package"
+            echo "sha256=$package_sha"
+            echo "prerelease=$chart_prerelease"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Prepare verified GitHub release draft
         env:
@@ -107,6 +114,7 @@ jobs:
           CHART_NAME: ${{ steps.chart.outputs.name }}
           CHART_VERSION: ${{ steps.chart.outputs.version }}
           CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          CHART_PRERELEASE: ${{ steps.chart.outputs.prerelease }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
@@ -120,24 +128,40 @@ jobs:
           trap cleanup EXIT
 
           git fetch --tags --force
-          if gh release view "$tag" --json assets,isDraft,targetCommitish \
+          if gh release view "$tag" --json assets,isDraft,isPrerelease,targetCommitish \
             >"$release_metadata" 2>/dev/null; then
             is_draft=$(jq -r '.isDraft' "$release_metadata")
+            is_prerelease=$(jq -r '.isPrerelease' "$release_metadata")
             target_commitish=$(jq -r '.targetCommitish' "$release_metadata")
           else
             if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
               echo "::error::Git tag ${tag} already exists without a GitHub release"
               exit 1
             fi
+            release_title="$tag"
+            release_notes="Helm chart release ${CHART_VERSION} for Paperless-ngx. Read UPGRADE-0.4.md before upgrading from chart 0.3.x."
+            release_flags=()
+            if [[ "$CHART_PRERELEASE" == "true" ]]; then
+              release_title="[EXPERIMENTAL] ${tag}"
+              release_notes="EXPERIMENTAL Paperless-ngx 3 Helm chart ${CHART_VERSION}. Stable chart 0.3.23 remains the default. Read UPGRADE-0.4.md before testing an upgrade."
+              release_flags+=(--prerelease --latest=false)
+            fi
             gh release create "$tag" \
               --draft \
               --target "$SOURCE_SHA" \
-              --title "$tag" \
-              --notes "Helm chart release ${CHART_VERSION} for Paperless-ngx. Read UPGRADE-0.4.md before upgrading from chart 0.3.x."
-            gh release view "$tag" --json assets,isDraft,targetCommitish \
+              --title "$release_title" \
+              --notes "$release_notes" \
+              "${release_flags[@]}"
+            gh release view "$tag" --json assets,isDraft,isPrerelease,targetCommitish \
               >"$release_metadata"
             is_draft=$(jq -r '.isDraft' "$release_metadata")
+            is_prerelease=$(jq -r '.isPrerelease' "$release_metadata")
             target_commitish=$(jq -r '.targetCommitish' "$release_metadata")
+          fi
+
+          if [[ "$is_prerelease" != "$CHART_PRERELEASE" ]]; then
+            echo "::error::Release prerelease status is ${is_prerelease}, expected ${CHART_PRERELEASE}"
+            exit 1
           fi
 
           asset_name="${CHART_NAME}-${CHART_VERSION}.tgz"
@@ -471,14 +495,16 @@ jobs:
           CHART_NAME: ${{ steps.chart.outputs.name }}
           CHART_VERSION: ${{ steps.chart.outputs.version }}
           CHART_PACKAGE: ${{ steps.chart.outputs.package }}
+          CHART_PRERELEASE: ${{ steps.chart.outputs.prerelease }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           tag="${CHART_NAME}-${CHART_VERSION}"
           asset_name="${CHART_NAME}-${CHART_VERSION}.tgz"
           metadata=$(gh release view "$tag" \
-            --json assets,isDraft,isImmutable,targetCommitish)
+            --json assets,isDraft,isImmutable,isPrerelease,targetCommitish)
           is_draft=$(jq -r '.isDraft' <<<"$metadata")
+          is_prerelease=$(jq -r '.isPrerelease' <<<"$metadata")
           target_commitish=$(jq -r '.targetCommitish' <<<"$metadata")
           unexpected_assets=$(jq \
             --arg expected "$asset_name" \
@@ -492,6 +518,10 @@ jobs:
           if [[ "$unexpected_assets" -ne 0 || "$expected_assets" -ne 1 ]]; then
             echo "::error::Release does not contain exactly the expected chart asset"
             jq -r '.assets[].name' <<<"$metadata"
+            exit 1
+          fi
+          if [[ "$is_prerelease" != "$CHART_PRERELEASE" ]]; then
+            echo "::error::Release prerelease status is ${is_prerelease}, expected ${CHART_PRERELEASE}"
             exit 1
           fi
 
@@ -517,7 +547,11 @@ jobs:
               echo "::error::Git tag ${tag} appeared while the release was still a draft"
               exit 1
             fi
-            gh release edit "$tag" --draft=false
+            if [[ "$CHART_PRERELEASE" == "true" ]]; then
+              gh release edit "$tag" --draft=false --prerelease
+            else
+              gh release edit "$tag" --draft=false
+            fi
             git fetch --tags --force
             tag_commit=$(git rev-parse "${tag}^{commit}")
             source_commit=$(git rev-parse "${SOURCE_SHA}^{commit}")
@@ -527,13 +561,17 @@ jobs:
             fi
           fi
 
-          final_metadata=$(gh release view "$tag" --json isDraft,isImmutable)
+          final_metadata=$(gh release view "$tag" --json isDraft,isImmutable,isPrerelease)
           if [[ "$(jq -r '.isDraft' <<<"$final_metadata")" != "false" ]]; then
             echo "::error::GitHub release is still a draft"
             exit 1
           fi
           if [[ "$(jq -r '.isImmutable' <<<"$final_metadata")" != "true" ]]; then
             echo "::error::Published GitHub release is not immutable"
+            exit 1
+          fi
+          if [[ "$(jq -r '.isPrerelease' <<<"$final_metadata")" != "$CHART_PRERELEASE" ]]; then
+            echo "::error::Published GitHub release has the wrong prerelease status"
             exit 1
           fi
           echo "Published immutable GitHub release ${tag}: ${expected_sha}"

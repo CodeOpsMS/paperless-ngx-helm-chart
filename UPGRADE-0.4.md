@@ -1,10 +1,11 @@
-# Upgrade to chart 0.4.0 and Paperless-ngx 3
+# Upgrade to experimental chart 0.4.0-experimental.1 and Paperless-ngx 3
 
-Chart 0.4.0 upgrades Paperless-ngx from 2.20.15 to 3.0.5. PostgreSQL stays on
+Chart `0.4.0-experimental.1` is an opt-in prerelease that upgrades Paperless-ngx
+from 2.20.15 to 3.0.5. Chart `0.3.23` remains the stable default and normal Helm
+search/install operations do not select this prerelease. PostgreSQL stays on
 17.6 for the tested bundled upgrade path, while Valkey receives the compatible
-9.0.5 security update. Keeping the database engine unchanged deliberately
-isolates the Paperless database and search migrations from a database-engine
-major upgrade.
+9.0.5 update. Keeping the database engine unchanged deliberately isolates the
+Paperless database and search migrations from a database-engine major upgrade.
 
 This procedure is mandatory for existing installations. Test it with a restored
 copy of production data before scheduling the production change.
@@ -12,25 +13,48 @@ copy of production data before scheduling the production change.
 ## Supported starting point
 
 - The running Paperless version must be exactly `2.20.15`.
+- For an existing Paperless 2 installation, migration
+  `documents.1075_workflowaction_order` must already be applied. Paperless 3
+  refuses to start from any other Paperless 2 migration state.
 - Use chart `0.3.23` as the tested baseline.
+- Upgrade the existing database and PVCs in place. Upstream only recommends
+  import between matching Paperless versions, and an import must target a fully
+  empty installation. Treat a Paperless 2 export as supplemental backup, not as
+  a guaranteed Paperless 3 migration or rollback path.
+- Upgrade directly to `3.0.5`; do not stop on the broken `3.0.1` migration.
 - Do not combine this change with a PostgreSQL, Valkey, storage-class, ingress,
   or authentication-provider migration.
 - Ensure Kubernetes is at least `1.34` and the node CPU meets the Paperless 3
   x86-64-v2 baseline on amd64.
 
+Kubernetes 1.34 is an intentional support-policy floor aligned with the tested
+1.34-1.36 matrix, not the technical introduction version of every rendered API.
+Clusters below that maintained/tested floor are unsupported and rejected by the
+chart metadata.
+
 Upgrade older Paperless installations to 2.20.15 first and validate them before
-continuing.
+continuing. Before the maintenance window, confirm the required migration:
+
+```bash
+kubectl exec deployment/paperless-ngx -n paperless-ngx -- \
+  python3 manage.py showmigrations documents | \
+  grep -F '[X] 1075_workflowaction_order'
+```
 
 ## Paperless 3 preflight
 
 Review the official [v3 migration guide](https://docs.paperless-ngx.com/migration-v3/)
 and resolve every applicable item:
 
-- Preserve or deliberately rotate `PAPERLESS_SECRET_KEY`. Rotating it invalidates
-  existing sessions and signed tokens.
+- Preserve `PAPERLESS_SECRET_KEY` across every Paperless pod. Rotating it
+  invalidates existing sessions and signed tokens, and Paperless 3 also uses it
+  for signed Celery messages.
 - Decrypt documents and thumbnails before upgrading; Paperless 3 removes the
   deprecated encryption support.
-- Drain document consumption, email fetching, workflows, and Celery tasks.
+- Drain document consumption, email fetching, workflows, and Celery tasks, and
+  confirm the broker queue is empty. Paperless 3 changes the Celery serializer
+  and no longer accepts queued Paperless 2 messages. Task results also move from
+  the database to Redis/Valkey and expire after one hour.
 - Replace `PAPERLESS_CONSUMER_POLLING` with
   `PAPERLESS_CONSUMER_POLLING_INTERVAL`.
 - Replace `PAPERLESS_CONSUMER_INOTIFY_DELAY` with
@@ -38,46 +62,98 @@ and resolve every applicable item:
 - Remove `PAPERLESS_CONSUMER_POLLING_DELAY`,
   `PAPERLESS_CONSUMER_POLLING_RETRY_COUNT`, and
   `PAPERLESS_CONSUMER_BARCODE_SCANNER`.
-- Convert consumer ignore patterns from fnmatch syntax to regular expressions
-  and use `PAPERLESS_CONSUMER_IGNORE_DIRS` for directories.
-- Decide whether duplicate documents should remain accepted. Set
-  `PAPERLESS_CONSUMER_DELETE_DUPLICATES=true` to retain rejection behavior.
+- Convert consumer ignore patterns from fnmatch syntax to JSON lists of regular
+  expressions and use `PAPERLESS_CONSUMER_IGNORE_DIRS` for directories. File
+  expressions are evaluated with Python `re.search()` against the filename only,
+  and both lists extend immutable built-in rules. Do not copy a glob unchanged:
+  for example, `._*` as a regex matches nearly every non-empty filename.
+- Decide whether duplicate documents should remain accepted. Paperless 3 accepts
+  them by default. `PAPERLESS_CONSUMER_DELETE_DUPLICATES=true` rejects and
+  deletes the duplicate input file; this is not identical to Paperless 2's
+  default, which rejected it but retained the input file.
 - Replace deprecated database SSL, timeout, and pool variables with a single
   `PAPERLESS_DB_OPTIONS` string.
 - Replace removed OCR/archive combinations with `PAPERLESS_OCR_MODE` values
   `auto`, `force`, `redo`, or `off` and `PAPERLESS_ARCHIVE_FILE_GENERATION`.
+  If the Paperless 2 installation depended on an archive copy being generated
+  for every document, explicitly set `PAPERLESS_OCR_MODE=auto` and
+  `PAPERLESS_ARCHIVE_FILE_GENERATION=always`; the Paperless 3 defaults may omit
+  an archive for born-digital PDFs.
 - Update pre- and post-consume scripts to use the documented environment
   variables instead of positional arguments.
 - Update API clients to version 9 or 10; Paperless 3 no longer supports API
-  versions below 9. The automated acceptance test uses API version 10.
+  versions below 9 and unversioned requests now use version 10. Review clients
+  that consume Task or SavedView responses. The automated acceptance test uses
+  API version 10.
+- Remove `PAPERLESS_SEARCH_LANGUAGE` for this 3.0.5 release. Explicitly setting
+  it can crash the migration initializer before startup; Paperless derives the
+  default search language from the OCR language. The chart schema blocks the
+  variable until the upstream 3.1 fix is available (see upstream
+  [issue #13767](https://github.com/paperless-ngx/paperless-ngx/issues/13767)).
 - Review OIDC `token_auth_method`, reverse-proxy trusted proxy settings, and
   login rate-limit client-IP handling.
 - If the remote OCR parser is used, record that it always creates an archive
   copy even when `PAPERLESS_ARCHIVE_FILE_GENERATION=never`.
-- Record that task history is cleared during the migration.
+- Record that task history is cleared and the old database-backed Celery result
+  tables are removed during the migration.
 - Review saved searches using notes or custom fields. Tantivy uses
-  `notes.note:` and `custom_fields.value:` field names.
-- Check amd64 nodes for the `sse4_2` CPU flag. On older processors that lack
-  the x86-64-v2 baseline, disable classifier training with
-  `PAPERLESS_TRAIN_TASK_CRON=disable` or move the workload to supported nodes.
+  `notes.note:` and `custom_fields.value:` field names. Explicit old field names
+  are migrated, but unqualified search terms cannot be rewritten reliably and
+  must be validated manually. Inventory and test complex Whoosh queries too:
+  saved views using wildcards or regex-like character classes can remain invalid
+  in 3.0.5 (see upstream
+  [issue #13568](https://github.com/paperless-ngx/paperless-ngx/issues/13568)).
+- Budget time and storage I/O for the first start: Paperless converts every
+  present original/archive file checksum from MD5 to SHA-256 sequentially and
+  rebuilds the incompatible Whoosh index as Tantivy. A missing media file is
+  only warned about and retains its old MD5 value. Update integrations that
+  assume a 32-character checksum.
+- Ensure the data PVC has generous free space and monitor Tantivy index growth.
+  Paperless 3.0.5 can retain orphaned Tantivy segments when several processes
+  write the index; `document_index optimize` does not compact Tantivy, and a
+  recreate/reindex only reduces the growth temporarily until an upstream fix
+  (see upstream
+  [issue #13679](https://github.com/paperless-ngx/paperless-ngx/issues/13679)).
+- Review workflow actions that assign custom-field values. Paperless 3.0.5 can
+  persist an empty value and later overwrite a manually assigned value; it also
+  cannot reliably set `false` or `0` in that action. Disable or correct affected
+  workflows until an upstream release containing
+  [fix #13630](https://github.com/paperless-ngx/paperless-ngx/pull/13630) is
+  deployed.
+- Check amd64 nodes for the `sse4_2` CPU flag and move the workload to nodes
+  that meet the x86-64-v2 baseline when it is absent. Disabling classifier
+  training is not sufficient for the official 3.0.5 image: document consumption
+  can still import an incompatible NumPy build. The upstream fix is targeted at
+  Paperless 3.1 and is not part of this experimental release (see upstream
+  [issue #13429](https://github.com/paperless-ngx/paperless-ngx/issues/13429)).
 - Review mail rules whose `maximum_age` exceeds 32767. Paperless clamps those
   values to 32767 during the database migration.
+- For SQLite, verify WAL/locking behavior on the actual PVC and keep a single
+  replica, especially on NFS/RWX storage. For MariaDB with binary logging, use
+  `binlog_format=ROW`. The chart's default PostgreSQL path is unaffected.
+- Rebuild and retest custom images and native extensions. Paperless 3 requires
+  Python 3.11 or newer; the official 3.0.5 image uses Python 3.12 on Debian
+  Trixie.
+- If an external Tika service is configured, pin `apache/tika:3.3.1.0`; do not
+  use `latest`, which now resolves to Tika 4 and breaks Office/EML consumption
+  with Paperless 3.0.5 (see upstream
+  [issue #13755](https://github.com/paperless-ngx/paperless-ngx/issues/13755)).
 
 The chart sets the now-required `PAPERLESS_DBENGINE=postgresql` explicitly for
 its default database. Before shutting down Paperless 2, run its documented
 `decrypt_documents` management command if document or thumbnail encryption was
 ever enabled, and verify that no encrypted files remain.
 
-The 0.4.0 values schema rejects chart-managed settings and removed Paperless 2
-variables when they are supplied through `env`.
+The `0.4.0-experimental.1` values schema rejects chart-managed settings and
+removed Paperless 2 variables when they are supplied through `env`.
 
 ## Values migration
 
-Create a new values file from the 0.4.0 defaults. Do not pass the old file
-unchanged and do not use `--reuse-values`.
+Create a new values file from the `0.4.0-experimental.1` defaults. Do not pass
+the old file unchanged and do not use `--reuse-values`.
 
-| Chart 0.3.x | Chart 0.4.0 |
-|-------------|-------------|
+| Chart 0.3.x | Chart 0.4.0-experimental.1 |
+|-------------|----------------------------|
 | `config.database.pass` for an external database | `config.database.password` or, preferably, `config.database.existingSecret` |
 | `config.database.name` / `user` for the bundled database | Keep their new defaults and configure `postgresql.auth.database` / `username` |
 | `config.database.pass` for the bundled database | Remove it; Paperless now reads the exact PostgreSQL dependency Secret/key |
@@ -87,23 +163,32 @@ unchanged and do not use `--reuse-values`.
 | `env.PAPERLESS_SECRET_KEY` | `config.secretKey.existingSecret` or the preserved chart-generated Secret |
 | `config.redis.url` containing credentials | Prefer `config.redis.existingSecret.name` and `.urlKey` |
 | `env.<NAME>.valuesFrom` | `env.<NAME>.valueFrom` |
+| Inline `config.oidcProviders` containing credentials | Prefer `env.PAPERLESS_SOCIALACCOUNT_PROVIDERS.valueFrom.secretKeyRef`; the schema rejects configuring both sources |
 | `env.PAPERLESS_CONSUMER_INOTIFY_DELAY` | `env.PAPERLESS_CONSUMER_STABILITY_DELAY` |
+| `env.PAPERLESS_SEARCH_LANGUAGE` | Remove it for Paperless 3.0.5; the schema rejects this known startup-breaking setting |
 | API clients using versions 1-8 | API version 9 or 10 |
+| Default rolling Deployment update | Default `strategy.type: Recreate`; opt in to `RollingUpdate` only after the major migration has completed and been accepted |
+| `serviceAccount.automount: true` default | Default is now `false`; enable it explicitly only if an integration in the Paperless pod needs the Kubernetes API token |
+| `persistence.enabled: true` | Chart-managed Paperless PVCs now default to `persistence.retain: true` and survive Helm uninstall |
+| Dependency-wide registry/OpenShift values | `global.imageRegistry`, `global.security.allowInsecureImages`, and `global.compatibility.openshift.adaptSecurityContext` remain supported; `global.image.registry` controls the Paperless image |
 | `livenessProbe.httpGet.path` | `livenessProbe.enabled: true` and `livenessProbe.path` |
 | `readinessProbe.httpGet.path` | `readinessProbe.enabled: true` and `readinessProbe.path` |
 | `livenessProbe.httpGet.port` / `readinessProbe.httpGet.port` | Remove; both probes now use the fixed named port `http` |
-| Empty or omitted legacy probe object | Set the corresponding `enabled: false` only when the probe should be disabled; otherwise start from the 0.4.0 defaults |
+| Empty or omitted legacy probe object | Set the corresponding `enabled: false` only when the probe should be disabled; otherwise start from the experimental defaults |
 
 Validate the migrated file before touching the cluster:
 
 ```bash
-helm lint paperless/paperless-ngx \
-  --version 0.4.0 \
+candidate=/tmp/paperless-ngx-0.4.0-experimental.1.tgz
+helm pull paperless/paperless-ngx \
+  --version 0.4.0-experimental.1 \
+  --destination /tmp
+
+helm lint "$candidate" \
   --strict \
   --values paperless-0.4-values.yaml
 
-helm template paperless-ngx paperless/paperless-ngx \
-  --version 0.4.0 \
+helm template paperless-ngx "$candidate" \
   --namespace paperless-ngx \
   --values paperless-0.4-values.yaml \
   >/tmp/paperless-0.4-rendered.yaml
@@ -219,20 +304,27 @@ been rehearsed.
 
 1. Announce maintenance and stop all new consumers and integrations.
 2. Confirm that uploaded documents are processed and no relevant task remains
-   pending or running.
-3. Scale only the Paperless Deployment to zero. Leave PostgreSQL and Valkey
-   running:
+   pending or running. Confirm the Redis/Valkey broker queue is empty.
+3. Disable autoscaling in the migration values (`autoscaling.enabled: false`,
+   `replicaCount: 1`) and remove the old HPA before scaling down. Otherwise its
+   controller can scale the Paperless 2 Deployment back up during migration.
+   Leave PostgreSQL and Valkey running:
 
    ```bash
+   kubectl delete hpa paperless-ngx -n paperless-ngx --ignore-not-found
    kubectl scale deployment paperless-ngx -n paperless-ngx --replicas=0
    kubectl rollout status deployment/paperless-ngx -n paperless-ngx --timeout=5m
    ```
 
+   The chart's default `Recreate` strategy is a second guard against mixed
+   Paperless 2/3 pods; it does not replace this explicit shutdown.
+
 4. Upgrade with the reviewed values file and the exact validated chart package:
 
    ```bash
-   helm upgrade paperless-ngx paperless/paperless-ngx \
-     --version 0.4.0 \
+   candidate=/tmp/paperless-ngx-0.4.0-experimental.1.tgz
+   test -f "$candidate"
+   helm upgrade paperless-ngx "$candidate" \
      --namespace paperless-ngx \
      --reset-values \
      --values paperless-0.4-values.yaml \
@@ -244,8 +336,10 @@ been rehearsed.
    Helm rollback cannot reverse Paperless database migrations safely.
 
 5. Follow the Paperless logs. The first Paperless 3 start applies database and
-   application migrations and rebuilds the incompatible Whoosh search index as
-   Tantivy. The default startup probe permits up to 30 minutes.
+   application migrations, converts document checksums, and rebuilds the
+   incompatible Whoosh search index as Tantivy. The default startup probe permits
+   up to 30 minutes; increase the probe and Helm timeout before upgrading a very
+   large archive rather than interrupting these operations.
 
 ## Acceptance checks
 
@@ -263,11 +357,17 @@ Before ending maintenance, verify:
 - document counts, tags, correspondents, document types, notes, custom fields,
   saved views, and permissions match the pre-upgrade inventory;
 - representative documents download with their original hashes;
+- every present original/archive file has a 64-character SHA-256 checksum and
+  every integration that consumes it has been updated; investigate any remaining
+  32-character value as evidence of a missing media file;
 - new documents can be consumed;
 - Tantivy returns expected document, note, and custom-field search results;
 - pre-/post-consume scripts work without positional arguments;
 - `helm test paperless-ngx -n paperless-ngx --logs` succeeds;
 - Kubernetes events and Paperless logs contain no repeated errors.
+
+Keep autoscaling disabled until every acceptance check has passed. Re-enable the
+HPA only in a separate reviewed Helm change.
 
 ## Recovery
 
