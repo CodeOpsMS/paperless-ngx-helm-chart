@@ -1,7 +1,7 @@
-# Upgrade to experimental chart 0.4.0-experimental.1 and Paperless-ngx 3
+# Upgrade to experimental chart 0.4.0-experimental.2 and Paperless-ngx 3
 
-Chart `0.4.0-experimental.1` is an opt-in prerelease that upgrades Paperless-ngx
-from 2.20.15 to 3.0.5. Chart `0.3.23` remains the stable default and normal Helm
+Chart `0.4.0-experimental.2` is an opt-in prerelease that upgrades Paperless-ngx
+from 2.20.15 to 3.1.1. Chart `0.3.23` remains the stable default and normal Helm
 search/install operations do not select this prerelease. PostgreSQL stays on
 17.6 for the tested bundled upgrade path, while Valkey receives the compatible
 9.0.5 update. Keeping the database engine unchanged deliberately isolates the
@@ -21,7 +21,7 @@ copy of production data before scheduling the production change.
   import between matching Paperless versions, and an import must target a fully
   empty installation. Treat a Paperless 2 export as supplemental backup, not as
   a guaranteed Paperless 3 migration or rollback path.
-- Upgrade directly to `3.0.5`; do not stop on the broken `3.0.1` migration.
+- Upgrade directly to `3.1.1`; do not stop on the broken `3.0.1` migration.
 - Do not combine this change with a PostgreSQL, Valkey, storage-class, ingress,
   or authentication-provider migration.
 - Ensure Kubernetes is at least `1.34` and the node CPU meets the Paperless 3
@@ -85,7 +85,7 @@ and resolve every applicable item:
   versions below 9 and unversioned requests now use version 10. Review clients
   that consume Task or SavedView responses. The automated acceptance test uses
   API version 10.
-- Remove `PAPERLESS_SEARCH_LANGUAGE` for this 3.0.5 release. Explicitly setting
+- Remove `PAPERLESS_SEARCH_LANGUAGE` for this 3.1.1 release. Explicitly setting
   it can crash the migration initializer before startup; Paperless derives the
   default search language from the OCR language. The chart schema blocks the
   variable until the upstream 3.1 fix is available (see upstream
@@ -101,7 +101,7 @@ and resolve every applicable item:
   are migrated, but unqualified search terms cannot be rewritten reliably and
   must be validated manually. Inventory and test complex Whoosh queries too:
   saved views using wildcards or regex-like character classes can remain invalid
-  in 3.0.5 (see upstream
+  in 3.1.1 (see upstream
   [issue #13568](https://github.com/paperless-ngx/paperless-ngx/issues/13568)).
 - Budget time and storage I/O for the first start: Paperless converts every
   present original/archive file checksum from MD5 to SHA-256 sequentially and
@@ -109,12 +109,12 @@ and resolve every applicable item:
   only warned about and retains its old MD5 value. Update integrations that
   assume a 32-character checksum.
 - Ensure the data PVC has generous free space and monitor Tantivy index growth.
-  Paperless 3.0.5 can retain orphaned Tantivy segments when several processes
+  Paperless 3.1.1 can retain orphaned Tantivy segments when several processes
   write the index; `document_index optimize` does not compact Tantivy, and a
   recreate/reindex only reduces the growth temporarily until an upstream fix
   (see upstream
   [issue #13679](https://github.com/paperless-ngx/paperless-ngx/issues/13679)).
-- Review workflow actions that assign custom-field values. Paperless 3.0.5 can
+- Review workflow actions that assign custom-field values. Paperless 3.1.1 can
   persist an empty value and later overwrite a manually assigned value; it also
   cannot reliably set `false` or `0` in that action. Disable or correct affected
   workflows until an upstream release containing
@@ -122,7 +122,7 @@ and resolve every applicable item:
   deployed.
 - Check amd64 nodes for the `sse4_2` CPU flag and move the workload to nodes
   that meet the x86-64-v2 baseline when it is absent. Disabling classifier
-  training is not sufficient for the official 3.0.5 image: document consumption
+  training is not sufficient for the official 3.1.1 image: document consumption
   can still import an incompatible NumPy build. The upstream fix is targeted at
   Paperless 3.1 and is not part of this experimental release (see upstream
   [issue #13429](https://github.com/paperless-ngx/paperless-ngx/issues/13429)).
@@ -132,11 +132,11 @@ and resolve every applicable item:
   replica, especially on NFS/RWX storage. For MariaDB with binary logging, use
   `binlog_format=ROW`. The chart's default PostgreSQL path is unaffected.
 - Rebuild and retest custom images and native extensions. Paperless 3 requires
-  Python 3.11 or newer; the official 3.0.5 image uses Python 3.12 on Debian
+  Python 3.11 or newer; the official 3.1.1 image uses Python 3.12 on Debian
   Trixie.
 - If an external Tika service is configured, pin `apache/tika:3.3.1.0`; do not
   use `latest`, which now resolves to Tika 4 and breaks Office/EML consumption
-  with Paperless 3.0.5 (see upstream
+  with Paperless 3.1.1 (see upstream
   [issue #13755](https://github.com/paperless-ngx/paperless-ngx/issues/13755)).
 
 The chart sets the now-required `PAPERLESS_DBENGINE=postgresql` explicitly for
@@ -144,15 +144,15 @@ its default database. Before shutting down Paperless 2, run its documented
 `decrypt_documents` management command if document or thumbnail encryption was
 ever enabled, and verify that no encrypted files remain.
 
-The `0.4.0-experimental.1` values schema rejects chart-managed settings and
+The `0.4.0-experimental.2` values schema rejects chart-managed settings and
 removed Paperless 2 variables when they are supplied through `env`.
 
 ## Values migration
 
-Create a new values file from the `0.4.0-experimental.1` defaults. Do not pass
+Create a new values file from the `0.4.0-experimental.2` defaults. Do not pass
 the old file unchanged and do not use `--reuse-values`.
 
-| Chart 0.3.x | Chart 0.4.0-experimental.1 |
+| Chart 0.3.x | Chart 0.4.0-experimental.2 |
 |-------------|----------------------------|
 | `config.database.pass` for an external database | `config.database.password` or, preferably, `config.database.existingSecret` |
 | `config.database.name` / `user` for the bundled database | Keep their new defaults and configure `postgresql.auth.database` / `username` |
@@ -165,7 +165,7 @@ the old file unchanged and do not use `--reuse-values`.
 | `env.<NAME>.valuesFrom` | `env.<NAME>.valueFrom` |
 | Inline `config.oidcProviders` containing credentials | Prefer `env.PAPERLESS_SOCIALACCOUNT_PROVIDERS.valueFrom.secretKeyRef`; the schema rejects configuring both sources |
 | `env.PAPERLESS_CONSUMER_INOTIFY_DELAY` | `env.PAPERLESS_CONSUMER_STABILITY_DELAY` |
-| `env.PAPERLESS_SEARCH_LANGUAGE` | Remove it for Paperless 3.0.5; the schema rejects this known startup-breaking setting |
+| `env.PAPERLESS_SEARCH_LANGUAGE` | Remove it for Paperless 3.1.1; the schema rejects this known startup-breaking setting |
 | API clients using versions 1-8 | API version 9 or 10 |
 | Default rolling Deployment update | Zero-surge `RollingUpdate` (`maxSurge: 0`, `maxUnavailable: 100%`); the required scale-to-zero step below is what prevents mixed v2/v3 processes during the major migration |
 | `serviceAccount.automount: true` default | Default is now `false`; enable it explicitly only if an integration in the Paperless pod needs the Kubernetes API token |
@@ -179,9 +179,9 @@ the old file unchanged and do not use `--reuse-values`.
 Validate the migrated file before touching the cluster:
 
 ```bash
-candidate=/tmp/paperless-ngx-0.4.0-experimental.1.tgz
+candidate=/tmp/paperless-ngx-0.4.0-experimental.2.tgz
 helm pull paperless/paperless-ngx \
-  --version 0.4.0-experimental.1 \
+  --version 0.4.0-experimental.2 \
   --destination /tmp
 
 helm lint "$candidate" \
@@ -337,7 +337,7 @@ been rehearsed.
 4. Upgrade with the reviewed values file and the exact validated chart package:
 
    ```bash
-   candidate=/tmp/paperless-ngx-0.4.0-experimental.1.tgz
+   candidate=/tmp/paperless-ngx-0.4.0-experimental.2.tgz
    test -f "$candidate"
    helm upgrade paperless-ngx "$candidate" \
      --namespace paperless-ngx \
@@ -375,7 +375,7 @@ been rehearsed.
 Before ending maintenance, verify:
 
 - the Paperless pod is Ready and all probes are healthy;
-- `/api/status/` reports Paperless 3.0.5, PostgreSQL status `OK`, no unapplied
+- `/api/status/` reports Paperless 3.1.1, PostgreSQL status `OK`, no unapplied
   migrations, a healthy Redis/Valkey connection, and a healthy search index;
 - PostgreSQL still reports version 17.6 and uses the original PVC;
 - Valkey still reports version 9.0.5;

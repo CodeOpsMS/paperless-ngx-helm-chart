@@ -3,7 +3,7 @@
 The pull-request workflow uploads the exact packaged candidate as the immutable,
 attempt-specific artifact
 `paperless-ngx-candidate-<run-id>-<run-attempt>`. Kind validates that candidate
-on Kubernetes 1.34-1.36. Before releasing `0.4.0-experimental.1`, the same
+on Kubernetes 1.34-1.36. Before releasing `0.4.0-experimental.2`, the same
 artifact must pass the real-cluster acceptance test in the isolated `suseai`
 namespace.
 
@@ -38,9 +38,9 @@ Identify the successful Helm CI run for the upgrade PR and download its
 candidate without rebuilding it locally:
 
 ```bash
-gh run list --workflow helm-ci.yml --branch chore/update-paperless-ngx-3.0.5
+gh run list --workflow helm-ci.yml --branch chore/update-paperless-ngx-3.1.1
 gh run download <run-id> --name paperless-ngx-candidate-<run-id>-<run-attempt> \
-  --dir /tmp/paperless-ngx-0.4.0-experimental.1-candidate
+  --dir /tmp/paperless-ngx-0.4.0-experimental.2-candidate
 ```
 
 Record the SHA-256 hash of the downloaded package in the PR acceptance comment.
@@ -109,7 +109,7 @@ NAMESPACE=paperless-ngx-v3-e2e \
 RELEASE=paperless-v3-e2e \
 CLEANUP_NAMESPACE=false \
 scripts/paperless-e2e.sh upgrade \
-  /tmp/paperless-ngx-0.4.0-experimental.1-candidate/paperless-ngx-0.4.0-experimental.1.tgz
+  /tmp/paperless-ngx-0.4.0-experimental.2-candidate/paperless-ngx-0.4.0-experimental.2.tgz
 ```
 
 Use a new, dedicated namespace and never point the runner at a production

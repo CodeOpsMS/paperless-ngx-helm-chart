@@ -6,7 +6,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
+          value: ghcr.io/paperless-ngx/paperless-ngx@sha256:73a1d0bcc5b50cb501f084da795722aa5e2988c6bc9b26ca1ae493a57a490c06
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-paperless-ngx
@@ -35,7 +35,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/paperless-ngx/paperless-ngx:3.0.5
+          value: ghcr.io/paperless-ngx/paperless-ngx:3.1.1
 
   - it: allows thirty minutes for migrations and Tantivy indexing
     asserts:
