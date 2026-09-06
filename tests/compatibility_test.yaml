@@ -1,0 +1,49 @@
+suite: Paperless 3.1 configuration compatibility
+templates:
+  - templates/secrets.yaml
+  - templates/deployment.yaml
+tests:
+  - it: permits an explicit Tantivy search language after the upstream startup fix
+    template: templates/secrets.yaml
+    set:
+      env.PAPERLESS_SEARCH_LANGUAGE: de
+    asserts:
+      - equal:
+          path: data.PAPERLESS_SEARCH_LANGUAGE
+          value: ZGU=
+
+  - it: supports a Secret-backed search language setting
+    template: templates/deployment.yaml
+    set:
+      env.PAPERLESS_SEARCH_LANGUAGE:
+        valueFrom:
+          secretKeyRef:
+            name: search-configuration
+            key: language
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PAPERLESS_SEARCH_LANGUAGE
+            valueFrom:
+              secretKeyRef:
+                name: search-configuration
+                key: language
+
+  - it: permits remote OCR for every supported document
+    template: templates/secrets.yaml
+    set:
+      env.PAPERLESS_REMOTE_OCR_MODE: always
+    asserts:
+      - equal:
+          path: data.PAPERLESS_REMOTE_OCR_MODE
+          value: YWx3YXlz
+
+  - it: permits workflow-only remote OCR
+    template: templates/secrets.yaml
+    set:
+      env.PAPERLESS_REMOTE_OCR_MODE: workflow_only
+    asserts:
+      - equal:
+          path: data.PAPERLESS_REMOTE_OCR_MODE
+          value: d29ya2Zsb3dfb25seQ==
