@@ -14,11 +14,11 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 > It is not an official Paperless-ngx chart and does not receive official
 > support from the Paperless-ngx project.
 
-> **Experimental preview:** Chart `0.4.0-experimental.1` deploys
-> Paperless-ngx 3.0.5 and is not the stable default. Chart `0.3.23`
+> **Experimental preview:** Chart `0.4.0-experimental.2` deploys
+> Paperless-ngx 3.1.3 and is not the stable default. Chart `0.3.23`
 > with Paperless-ngx `2.20.15` remains the production/stable release.
 
-This experimental chart deploys Paperless-ngx 3.0.5 with optional PostgreSQL and
+This experimental chart deploys Paperless-ngx 3.1.3 with optional PostgreSQL and
 Valkey dependencies. The default deployment uses PostgreSQL 17.6 and Valkey
 9.0.5. All default container images are pinned to immutable multi-platform
 digests.
@@ -49,7 +49,7 @@ Kubernetes 1.34 is the chart's intentional maintained-and-tested support floor,
 not a claim that every rendered Kubernetes API first appeared in 1.34. Older
 clusters are rejected because they are outside this release's CI/support matrix.
 
-The tested dependency versions for chart 0.4.0-experimental.1 are:
+The tested dependency versions for chart 0.4.0-experimental.2 are:
 
 | Component | Chart | Application |
 |-----------|-------|-------------|
@@ -83,7 +83,7 @@ only by its exact version:
 
 ```bash
 helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.4.0-experimental.1 \
+  --version 0.4.0-experimental.2 \
   --namespace paperless-ngx-experimental \
   --create-namespace
 ```
@@ -93,7 +93,7 @@ helm install paperless-ngx paperless/paperless-ngx \
 ```bash
 helm install paperless-ngx \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0-experimental.1 \
+  --version 0.4.0-experimental.2 \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -103,7 +103,7 @@ GHCR keeps both published chart versions addressable by version:
 | Chart version | Paperless-ngx | Purpose |
 |---------------|---------------|---------|
 | `0.3.23` | `2.20.15` | Last Paperless 2 release |
-| `0.4.0-experimental.1` | `3.0.5` | Experimental Paperless 3 preview |
+| `0.4.0-experimental.2` | `3.1.3` | Experimental Paperless 3 preview |
 
 Chart 0.3.23 remains available for existing Paperless 2 installations, but it
 is a historical release and does not receive Paperless 3 fixes or current
@@ -121,7 +121,7 @@ helm install paperless-v2 \
 
 helm install paperless-v3 \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0-experimental.1 \
+  --version 0.4.0-experimental.2 \
   --namespace paperless-v3 \
   --create-namespace
 ```
@@ -186,7 +186,7 @@ changed after registration.
 
 ## Upgrading from chart 0.3.x
 
-Experimental chart 0.4.0-experimental.1 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.0.5. Do not
+Experimental chart 0.4.0-experimental.2 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.1.3. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
 rely on `helm rollback` after the database migration has run.
 
@@ -196,7 +196,7 @@ procedure, controlled application shutdown, validation, and recovery steps.
 
 PostgreSQL remains at 17.6, while Valkey is updated within major version 9 from
 9.0.2 to 9.0.5. No database-engine or broker major migration is performed by
-chart 0.4.0-experimental.1.
+chart 0.4.0-experimental.2.
 
 ## Scaling and availability
 
@@ -228,7 +228,7 @@ helm-unittest, fixed dependency-archive and container-image digests, Kubernetes
 server-side dry runs, and a required Kubernetes 1.36 installation. One candidate
 package is reused byte-for-byte by all installation and upgrade jobs. The
 Paperless 3 upgrade PR and the daily workflow additionally test fresh installs
-on Kubernetes 1.34-1.36 and Paperless 2.20.15-to-3.0.5 upgrades across Helm 3 and Helm 4.
+on Kubernetes 1.34-1.36 and Paperless 2.20.15-to-3.1.3 upgrades across Helm 3 and Helm 4.
 
 | Update | Automation policy |
 |--------|-------------------|
@@ -314,7 +314,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | grafana.dashboards.annotations | object | `{}` |  |
 | grafana.dashboards.enabled | bool | `false` |  |
 | grafana.dashboards.labels.grafana_dashboard | string | `"1"` |  |
-| image.digest | string | `"sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b"` | Immutable multi-platform image digest. When set, it overrides the tag. |
+| image.digest | string | `"sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a"` | Immutable multi-platform image digest. When set, it overrides the tag. |
 | image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. (could be overwritten by global.image.pullPolicy) |
 | image.registry | string | `"ghcr.io"` | image registry (could be overwritten by global.image.registry) |
 | image.repository | string | `"paperless-ngx/paperless-ngx"` | image repository |
