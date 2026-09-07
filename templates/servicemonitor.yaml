@@ -1,4 +1,4 @@
-{{- if and .Values.prometheus.servicemonitor.enabled }}
+{{- if and .Values.prometheus.servicemonitor.enabled .Values.env.PAPERLESS_ENABLE_FLOWER }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -24,4 +24,3 @@ spec:
       {{- end }}
       {{- end }}
 {{- end }}
-

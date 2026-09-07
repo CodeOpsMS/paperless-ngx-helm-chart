@@ -131,6 +131,10 @@ jobs:
       - name: Run chart unit tests
         run: helm unittest --strict .
 
+      - name: Test release metadata update safety
+        if: startsWith(matrix.helm-version, 'v4.')
+        run: python3 .github/scripts/test-update-paperless-metadata.py
+
       - name: Check repository metadata and stable icon
         run: |
           bash .github/scripts/check-repository-metadata.sh .
@@ -155,6 +159,10 @@ jobs:
           grep -Fq '    type: RollingUpdate' /tmp/paperless-rollout.yaml
           grep -Fq '      maxSurge: 0' /tmp/paperless-rollout.yaml
           grep -Fq '      maxUnavailable: 100%' /tmp/paperless-rollout.yaml
+          helm template ci-search-language . \
+            --set-string env.PAPERLESS_SEARCH_LANGUAGE=de \
+            >/tmp/paperless-search-language.yaml
+          grep -Fq 'PAPERLESS_SEARCH_LANGUAGE: ZGU=' /tmp/paperless-search-language.yaml
           helm template ci-external . \
             --namespace paperless-ngx-ci \
             --set postgresql.enabled=false \
@@ -275,6 +283,13 @@ jobs:
           expect_failure helm template invalid . --set env.PAPERLESS_CONSUMER_POLLING_DELAY=5
           expect_failure helm template invalid . --set env.PAPERLESS_CONSUMER_BARCODE_SCANNER=ZXING
           expect_failure helm template invalid . --set env.PAPERLESS_OCR_MODE=skip
+          expect_failure helm template invalid . --set-string env.PAPERLESS_ENABLE_FLOWER=false
+          expect_failure helm template invalid . \
+            --set-json 'env.PAPERLESS_ENABLE_FLOWER={"value":"true"}'
+          expect_failure helm template invalid . \
+            --set prometheus.servicemonitor.enabled=true \
+            --set env.PAPERLESS_ENABLE_FLOWER=false
+          expect_failure helm template invalid . --set-string env.PAPERLESS_REMOTE_OCR_MODE=invalid
           expect_failure helm template invalid . --set image.digest=invalid
           expect_failure helm template invalid . --set tests.image.digest=invalid
           expect_failure helm template invalid . \
@@ -293,8 +308,6 @@ jobs:
           expect_failure helm template invalid . --set-string postgresql.namespaceOverride=other-namespace
           expect_failure helm template invalid . --set valkey.auth.enabled=true
           expect_failure helm template invalid . --set valkey.tls.enabled=true
-          expect_failure helm template invalid . \
-            --set-string env.PAPERLESS_SEARCH_LANGUAGE=de
           expect_failure helm template invalid . \
             --set strategy.type=Recreate
           expect_failure helm template invalid . \
@@ -608,16 +621,33 @@ jobs:
             upgrade_helm: *helm3
             kubernetes: "1.34"
             node_image: *kind134
+            baseline_version: 0.3.23
+            baseline_app: 2.20.15
+            baseline_sha: 6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
           - name: Helm 3 to Helm 4
             base_helm: *helm3
             upgrade_helm: *helm4
             kubernetes: "1.35"
             node_image: *kind135
+            baseline_version: 0.3.23
+            baseline_app: 2.20.15
+            baseline_sha: 6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
           - name: Helm 4 to Helm 4
             base_helm: *helm4
             upgrade_helm: *helm4
             kubernetes: "1.36"
             node_image: *kind136
+            baseline_version: 0.3.23
+            baseline_app: 2.20.15
+            baseline_sha: 6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
+          - name: Paperless 3.0.5 to current / Helm 4
+            base_helm: *helm4
+            upgrade_helm: *helm4
+            kubernetes: "1.36"
+            node_image: *kind136
+            baseline_version: 0.4.0-experimental.1
+            baseline_app: 3.0.5
+            baseline_sha: fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df
 
     steps:
       - name: Checkout
@@ -662,45 +692,45 @@ jobs:
           node_image: ${{ matrix.node_image }}
           wait: 120s
 
-      - name: Download verified 0.3.23 baseline and resolve candidate
+      - name: Download verified baseline and resolve candidate
         id: candidate
+        env:
+          BASELINE_VERSION: ${{ matrix.baseline_version }}
+          BASELINE_APP: ${{ matrix.baseline_app }}
+          BASELINE_SHA: ${{ matrix.baseline_sha }}
         run: |
           set -euo pipefail
 
-          baseline_version=0.3.23
-          baseline_sha=6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
-          baseline_package=".candidate/paperless-ngx-${baseline_version}.tgz"
+          mkdir -p .baseline
+          baseline_package=".baseline/paperless-ngx-${BASELINE_VERSION}.tgz"
           curl --fail --silent --show-error --location --retry 3 --retry-delay 5 \
             --output "$baseline_package" \
-            "https://github.com/CodeOpsMS/paperless-ngx-helm-chart/releases/download/paperless-ngx-${baseline_version}/paperless-ngx-${baseline_version}.tgz"
+            "https://github.com/CodeOpsMS/paperless-ngx-helm-chart/releases/download/paperless-ngx-${BASELINE_VERSION}/paperless-ngx-${BASELINE_VERSION}.tgz"
           actual_baseline_sha=$(sha256sum "$baseline_package" | awk '{ print $1 }')
-          if [[ "$actual_baseline_sha" != "$baseline_sha" ]]; then
-            echo "::error::Baseline package SHA-256 mismatch: expected=${baseline_sha}, actual=${actual_baseline_sha}"
+          if [[ "$actual_baseline_sha" != "$BASELINE_SHA" ]]; then
+            echo "::error::Baseline package SHA-256 mismatch: expected=${BASELINE_SHA}, actual=${actual_baseline_sha}"
             exit 1
           fi
-          test "$(helm show chart "$baseline_package" | awk '/^version:/ { print $2; exit }')" = "$baseline_version"
-          test "$(helm show chart "$baseline_package" | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2; exit }')" = "2.20.15"
+          test "$(helm show chart "$baseline_package" | awk '/^version:/ { print $2; exit }')" = "$BASELINE_VERSION"
+          test "$(helm show chart "$baseline_package" | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2; exit }')" = "$BASELINE_APP"
 
           candidate_packages=(.candidate/paperless-ngx-*.tgz)
-          if [[ "${#candidate_packages[@]}" -ne 2 ]]; then
-            echo "::error::Expected the baseline and exactly one candidate package"
+          if [[ "${#candidate_packages[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one candidate package"
             exit 1
           fi
-          candidate_package=
-          for package in "${candidate_packages[@]}"; do
-            if [[ "$package" != "$baseline_package" ]]; then
-              candidate_package=$package
-            fi
-          done
+          candidate_package=${candidate_packages[0]}
           test -s "$baseline_package"
           test -s "$candidate_package"
-          test "$(helm show chart "$candidate_package" | awk '/^version:/ { print $2; exit }')" != "$baseline_version"
+          test "$(helm show chart "$candidate_package" | awk '/^version:/ { print $2; exit }')" != "$BASELINE_VERSION"
           echo "Candidate SHA-256: $(sha256sum "$candidate_package" | awk '{ print $1 }')"
           echo "path=$candidate_package" >>"$GITHUB_OUTPUT"
+          echo "baseline=$baseline_package" >>"$GITHUB_OUTPUT"
 
-      - name: Run Paperless 2 to 3 upgrade E2E
+      - name: Run application upgrade E2E
         env:
-          BASE_CHART_PACKAGE: .candidate/paperless-ngx-0.3.23.tgz
+          BASE_CHART_PACKAGE: ${{ steps.candidate.outputs.baseline }}
+          BASE_CHART_VERSION: ${{ matrix.baseline_version }}
           BASE_HELM_BIN: /tmp/helm-base
           HELM_BIN: /tmp/helm-upgrade
           NAMESPACE: paperless-upgrade

@@ -7,3 +7,24 @@ tests:
       - equal:
           path: spec.selector["app.kubernetes.io/component"]
           value: web
+
+  - it: exposes the Flower metrics port when enabled
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9100
+            protocol: TCP
+            targetPort: metrics
+
+  - it: omits the metrics port when Flower is disabled
+    set:
+      env.PAPERLESS_ENABLE_FLOWER: false
+    asserts:
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+      - equal:
+          path: spec.ports[0].name
+          value: http

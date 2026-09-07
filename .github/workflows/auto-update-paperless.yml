@@ -6,6 +6,10 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch: {}
 
+concurrency:
+  group: auto-update-paperless
+  cancel-in-progress: false
+
 jobs:
   check-update:
     runs-on: ubuntu-latest
@@ -107,6 +111,20 @@ jobs:
             exit 0
           fi
 
+          # Once a reviewer starts working on an update, preserve that branch.
+          # Recreating it every six hours can replace compatibility fixes and
+          # repeatedly dispatch CI against an unchanged, already failing head.
+          update_branch="chore/update-paperless-ngx-${latest_version}"
+          existing_pr=$(gh pr list --state open --head "$update_branch" \
+            --json number,url --jq '.[0].url // empty')
+          if [[ -n "$existing_pr" ]]; then
+            echo "An update is already awaiting review: ${existing_pr}"
+            echo "update=false" >>"$GITHUB_OUTPUT"
+            printf 'Paperless-ngx %s is available. Continue the existing review: %s\n' \
+              "$latest_version" "$existing_pr" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           {
             echo "update=true"
             echo "old_version=$current_version"
@@ -128,22 +146,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          current_chart_version=$(awk '/^version:/ { gsub(/"/, "", $2); print $2 }' Chart.yaml)
-          if [[ "$current_chart_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            chart_major=${BASH_REMATCH[1]}
-            chart_minor=${BASH_REMATCH[2]}
-            chart_patch=${BASH_REMATCH[3]}
-            new_chart_version="${chart_major}.${chart_minor}.$((chart_patch + 1))"
-          elif [[ "$current_chart_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-experimental\.([0-9]+)$ ]]; then
-            chart_major=${BASH_REMATCH[1]}
-            chart_minor=${BASH_REMATCH[2]}
-            chart_patch=${BASH_REMATCH[3]}
-            experimental_iteration=${BASH_REMATCH[4]}
-            new_chart_version="${chart_major}.${chart_minor}.${chart_patch}-experimental.$((experimental_iteration + 1))"
-          else
-            echo "Invalid current chart version: ${current_chart_version}"
-            exit 1
-          fi
           previous_security_status=$(awk '
             /^  artifacthub.io\/containsSecurityUpdates:/ {
               gsub(/"/, "", $2)
@@ -160,26 +162,11 @@ jobs:
             echo "This workflow must never prepare a major application update"
             exit 1
           fi
-          sed -i "s/^version: .*/version: \"${new_chart_version}\"/" Chart.yaml
-          sed -i "s/^appVersion: .*/appVersion: \"${NEW_APP_VERSION}\"/" Chart.yaml
-          sed -i "0,/^  digest: .*/s//  digest: \"${NEW_IMAGE_DIGEST}\"/" values.yaml
-          sed -i \
-            "s|image: ghcr.io/paperless-ngx/paperless-ngx@${OLD_IMAGE_DIGEST}|image: ghcr.io/paperless-ngx/paperless-ngx@${NEW_IMAGE_DIGEST}|" \
-            Chart.yaml
-          sed -i \
-            "s/${OLD_IMAGE_DIGEST}/${NEW_IMAGE_DIGEST}/g; s/${OLD_APP_VERSION}/${NEW_APP_VERSION}/g" \
-            tests/deployment_test.yaml
-          sed -i "s/${OLD_APP_VERSION}/${NEW_APP_VERSION}/g" \
-            Chart.yaml UPGRADE-0.4.md TESTING.md
-          sed -i "s/${current_chart_version}/${new_chart_version}/g" \
-            .github/pages/index.html _docs.gotmpl UPGRADE-0.4.md TESTING.md
-
-          # A new upstream release must be reviewed on its own merits. Do not
-          # carry the previous chart release's security annotation forward.
-          sed -i \
-            's/^  artifacthub.io\/containsSecurityUpdates: "true"$/  artifacthub.io\/containsSecurityUpdates: "false"/' \
-            Chart.yaml
-          sed -i '/^    - kind: security$/,+1d' Chart.yaml
+          # Update only current package metadata. Historical migration findings
+          # and cluster acceptance evidence need review, not version substitution.
+          python3 .github/scripts/update-paperless-metadata.py \
+            --version "$NEW_APP_VERSION" --digest "$NEW_IMAGE_DIGEST"
+          new_chart_version=$(awk '/^version:/ { gsub(/"/, "", $2); print $2 }' Chart.yaml)
 
           scripts/generate-readme.sh
 
@@ -228,8 +215,11 @@ jobs:
             In particular, determine whether this Paperless release contains security fixes. If it
             does, set `artifacthub.io/containsSecurityUpdates` back to `true` and add a matching
             `kind: security` entry to `artifacthub.io/changes` before merging.
-            Also remove version-scoped schema guards only after their upstream fixes are present in
-            the target image (currently `PAPERLESS_SEARCH_LANGUAGE` for Paperless 3.0.5).
+            `UPGRADE-0.4.md` and `TESTING.md` retain their previously reviewed facts and acceptance
+            evidence. Update them for this target release after reviewing upstream changes and
+            running the matching upgrade tests; do not replace historical version numbers globally.
+            Remove version-scoped schema guards only after verifying their upstream fixes.
+            The updater preserves an existing open PR and its human-authored compatibility fixes.
             Publishing remains handled by `release.yml` only after this PR is reviewed and merged.
           reviewers: CodeOpsMS
 

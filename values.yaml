@@ -40,7 +40,7 @@ image:
   # -- image tag - Overrides the image tag whose default is the chart appVersion.
   tag: ""
   # -- Immutable multi-platform image digest. When set, it overrides the tag.
-  digest: "sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b"
+  digest: "sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a"
 
 
 serviceAccount:
@@ -155,6 +155,7 @@ env:
   # -- correct ip-address by X-Forwarded-For (example value for env)
   PAPERLESS_USE_X_FORWARD_HOST: true
   # -- start service for monitor background jobs e.g. for prometheus (example value for env)
+  # Use a YAML boolean. False disables the process and metrics ports together.
   PAPERLESS_ENABLE_FLOWER: true
   # -- Example using a Kubernetes EnvVar source.
   # PAPERLESS_TEST:
@@ -333,8 +334,7 @@ tests:
 
 prometheus:
   servicemonitor:
-    # -- broken, Host need to be localhost on request (instatt of ip)
-    # needs: https://github.com/prometheus-operator/prometheus-operator/pull/7003
+    # -- Enable Flower scraping. Requires the ServiceMonitor CRD and env.PAPERLESS_ENABLE_FLOWER=true.
     enabled: false
     labels: {}
     # -- interval
@@ -405,7 +405,7 @@ valkey:
     port: 6379
 
   image:
-    tag: "9.0.5@sha256:2437dbc85bb67005fa7db135dfbc45075b800f4afa1ab2a301e3b878b0c273e2"
+    tag: "9.0.5@sha256:4c64dfeae602349cd38b70ecfc631ab99624283cd975f34f96a72c6050f1b890"
 
   dataStorage:
     className: ""

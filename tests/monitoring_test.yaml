@@ -1,0 +1,59 @@
+suite: Paperless monitoring
+templates:
+  - templates/prometheus-rules.yaml
+  - templates/servicemonitor.yaml
+tests:
+  - it: omits disabled monitoring resources
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: omits alert rules when no rules have been configured
+    template: templates/prometheus-rules.yaml
+    set:
+      prometheus.rules.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders all custom alerts in exactly one group
+    template: templates/prometheus-rules.yaml
+    set:
+      prometheus.rules.enabled: true
+      prometheus.rules.additionalRules:
+        - alert: PaperlessDown
+          expr: up == 0
+          for: 5m
+        - record: paperless:up:sum
+          expr: sum(up)
+    asserts:
+      - hasDocuments:
+          count: 1
+      - lengthEqual:
+          path: spec.groups
+          count: 1
+      - equal:
+          path: spec.groups[0].name
+          value: RELEASE-NAME-paperless-ngx-Additional
+      - equal:
+          path: spec.groups[0].rules
+          value:
+            - alert: PaperlessDown
+              expr: up == 0
+              for: 5m
+            - record: paperless:up:sum
+              expr: sum(up)
+
+  - it: monitors the enabled Flower metrics endpoint
+    template: templates/servicemonitor.yaml
+    set:
+      prometheus.servicemonitor.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.endpoints[0].port
+          value: metrics
+      - equal:
+          path: spec.endpoints[0].path
+          value: /metrics

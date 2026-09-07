@@ -14,12 +14,15 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 > It is not an official Paperless-ngx chart and does not receive official
 > support from the Paperless-ngx project.
 
-> **Experimental preview:** Chart `0.4.0-experimental.1` deploys
-> Paperless-ngx 3.0.5 and is not the stable default. Chart `0.3.23`
-> with Paperless-ngx `2.20.15` remains the production/stable release.
+> **Experimental preview:** Chart `0.4.0-experimental.2` deploys
+> Paperless-ngx 3.1.3 and is not the stable default. Chart `0.3.23`
+> with Paperless-ngx `2.20.15` remains the historical stable/default channel.
+> The experimental label applies to this chart; Paperless-ngx 3.1.3 is an
+> upstream stable release and includes newer security fixes.
 
-This experimental chart deploys Paperless-ngx 3.0.5 with optional PostgreSQL and
-Valkey dependencies. The default deployment uses PostgreSQL 17.6 and Valkey
+This experimental chart deploys Paperless-ngx 3.1.3 with optional PostgreSQL and
+Valkey dependencies. The default deployment retains legacy PostgreSQL 17.6 for
+upgrade testing and uses Valkey
 9.0.5. All default container images are pinned to immutable multi-platform
 digests.
 
@@ -42,14 +45,20 @@ digests.
 
 - Kubernetes `1.34` or newer
 - Helm 3 or Helm 4 (the exact maintained versions are pinned in CI)
-- An x86-64-v2 capable CPU on amd64, or a supported arm64 node
+- An x86-64-v2 capable CPU on amd64 for classifier support, or a supported arm64 node
 - Persistent storage for production use
 
 Kubernetes 1.34 is the chart's intentional maintained-and-tested support floor,
 not a claim that every rendered Kubernetes API first appeared in 1.34. Older
 clusters are rejected because they are outside this release's CI/support matrix.
 
-The tested dependency versions for chart 0.4.0-experimental.1 are:
+On older amd64 CPUs without SSE4.2, upstream documents a restricted setup with
+`PAPERLESS_TRAIN_TASK_CRON=disable` that gives up classifier-based matching.
+The separate 3.0.5 OCR failure on this hardware is fixed in the 3.1 line; test
+the actual hardware before relying on this configuration. See
+[UPGRADE-0.4.md](UPGRADE-0.4.md) for details.
+
+The tested dependency versions for chart 0.4.0-experimental.2 are:
 
 | Component | Chart | Application |
 |-----------|-------|-------------|
@@ -57,12 +66,16 @@ The tested dependency versions for chart 0.4.0-experimental.1 are:
 | Valkey | `0.9.4` | `9.0.5` |
 
 The bundled `bitnamilegacy/postgresql` image is archived and no longer
-maintained. It remains in the 0.4 release line only for compatibility with the
-validated Paperless 2-to-3 migration. For a new or production installation,
+maintained. PostgreSQL 17.6 is a legacy test baseline, not a current security
+release. It remains in the 0.4 release line for compatibility with historical
+upgrade baselines. For a new or production installation,
 disable the bundled database and use a maintained external PostgreSQL 17
-service ([currently PostgreSQL 17.10](https://www.postgresql.org/docs/17/release-17-10.html))
+service ([17.11 at this review](https://www.postgresql.org/docs/17/release-17-11.html))
 with independent backups and lifecycle management. Moving the bundled
 dependency to PostgreSQL 18 is intentionally outside this migration release.
+The Docker Official PostgreSQL image is not a drop-in replacement for the
+Bitnami chart's entrypoint, environment variables, or data layout; do not change
+only `postgresql.image.repository` to migrate a database.
 
 ## Installation
 
@@ -83,7 +96,7 @@ only by its exact version:
 
 ```bash
 helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.4.0-experimental.1 \
+  --version 0.4.0-experimental.2 \
   --namespace paperless-ngx-experimental \
   --create-namespace
 ```
@@ -93,7 +106,7 @@ helm install paperless-ngx paperless/paperless-ngx \
 ```bash
 helm install paperless-ngx \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0-experimental.1 \
+  --version 0.4.0-experimental.2 \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -103,7 +116,7 @@ GHCR keeps both published chart versions addressable by version:
 | Chart version | Paperless-ngx | Purpose |
 |---------------|---------------|---------|
 | `0.3.23` | `2.20.15` | Last Paperless 2 release |
-| `0.4.0-experimental.1` | `3.0.5` | Experimental Paperless 3 preview |
+| `0.4.0-experimental.2` | `3.1.3` | Experimental Paperless 3 preview |
 
 Chart 0.3.23 remains available for existing Paperless 2 installations, but it
 is a historical release and does not receive Paperless 3 fixes or current
@@ -121,7 +134,7 @@ helm install paperless-v2 \
 
 helm install paperless-v3 \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0-experimental.1 \
+  --version 0.4.0-experimental.2 \
   --namespace paperless-v3 \
   --create-namespace
 ```
@@ -184,9 +197,11 @@ indexes that published repository directly.
 The repository name is part of the Artifact Hub package URL and cannot be
 changed after registration.
 
-## Upgrading from chart 0.3.x
+## Upgrading
 
-Experimental chart 0.4.0-experimental.1 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.0.5. Do not
+### From chart 0.3.x and Paperless 2
+
+Experimental chart 0.4.0-experimental.2 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.1.3. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
 rely on `helm rollback` after the database migration has run.
 
@@ -196,7 +211,33 @@ procedure, controlled application shutdown, validation, and recovery steps.
 
 PostgreSQL remains at 17.6, while Valkey is updated within major version 9 from
 9.0.2 to 9.0.5. No database-engine or broker major migration is performed by
-chart 0.4.0-experimental.1.
+chart 0.4.0-experimental.2.
+
+### Upgrading the previous Paperless 3 preview
+
+Chart `0.4.0-experimental.1` with Paperless `3.0.5` can upgrade directly to
+`0.4.0-experimental.2` with Paperless `3.1.3`.
+Its existing v3 database does not need the v2 migration prerequisite or another
+Whoosh/checksum conversion. Back up and rehearse recovery, drain tasks, stop
+the application completely, and apply the reviewed values to the same database,
+Secrets, and PVCs as described in [UPGRADE-0.4.md](UPGRADE-0.4.md).
+
+Paperless 3.1 fixes the explicit `PAPERLESS_SEARCH_LANGUAGE` startup failure,
+orphaned Tantivy segment growth, and custom-field workflow assignment problems
+documented for 3.0.5. Search language is supported again; changing it rebuilds
+the index. Version 3.1.3 includes the fix for
+[GHSA-2jhj-xqrq-rmrq](https://github.com/paperless-ngx/paperless-ngx/security/advisories/GHSA-2jhj-xqrq-rmrq),
+uses Python 3.14 in the official image, and respects archive settings for remote
+OCR. Review optional OIDC role synchronization and remote OCR settings before
+using them. API versions remain 9 and 10. Tika 4 and some complex Whoosh saved
+queries remain incompatible, and network-scanner partial-file delivery needs
+an environment-specific test; the upgrade guide covers these limitations.
+
+`env.PAPERLESS_ENABLE_FLOWER` now requires a YAML boolean. Set `false` to
+disable Flower; the chart renders an empty environment value because the image
+treats non-empty strings such as `"false"` as enabled. A ServiceMonitor requires
+both `prometheus.servicemonitor.enabled=true` and
+`env.PAPERLESS_ENABLE_FLOWER=true`.
 
 ## Scaling and availability
 
@@ -205,8 +246,8 @@ strategy type stays `RollingUpdate` because Helm 4 server-side apply cannot
 safely clear the old `rollingUpdate` field during a live switch to `Recreate`.
 The default (`maxSurge: 0`, `maxUnavailable: 100%`) avoids creating an extra
 application pod. It is not a substitute for the explicit scale-to-zero and
-complete pod-termination wait in the upgrade guide, which prevents Paperless 2
-and 3 from overlapping during the irreversible database migration. This
+complete pod-termination wait in the upgrade guide, which prevents old and new
+Paperless versions from overlapping during database migrations. This
 disruptive default causes downtime on every rollout until the budgets are
 changed after the migration has been accepted. The chart still runs
 the Paperless web server, consumer, scheduler, and worker processes together in
@@ -228,7 +269,8 @@ helm-unittest, fixed dependency-archive and container-image digests, Kubernetes
 server-side dry runs, and a required Kubernetes 1.36 installation. One candidate
 package is reused byte-for-byte by all installation and upgrade jobs. The
 Paperless 3 upgrade PR and the daily workflow additionally test fresh installs
-on Kubernetes 1.34-1.36 and Paperless 2.20.15-to-3.0.5 upgrades across Helm 3 and Helm 4.
+on Kubernetes 1.34-1.36 and upgrades from Paperless 2.20.15 and the previous
+Paperless 3.0.5 preview across Helm 3 and Helm 4.
 
 | Update | Automation policy |
 |--------|-------------------|
@@ -300,7 +342,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | config.secretRevision | int | `0` | Non-sensitive rollout revision for Secret-backed Paperless settings. Increment this when another config value changes the chart-managed Secret, a scalar env value changes, or referenced Secret contents change. Never put a credential or credential hash here. |
 | config.url | string | `""` | Public Paperless URL. Empty derives the URL from the first ingress host. |
 | deploymentLabels | object | `{}` | This is for setting Kubernetes Labels to a Deployment. For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ |
-| env.PAPERLESS_ENABLE_FLOWER | bool | `true` | start service for monitor background jobs e.g. for prometheus (example value for env) |
+| env.PAPERLESS_ENABLE_FLOWER | bool | `true` | start service for monitor background jobs e.g. for prometheus (example value for env) Use a YAML boolean. False disables the process and metrics ports together. |
 | env.PAPERLESS_USE_X_FORWARD_HOST | bool | `true` | correct ip-address by X-Forwarded-For (example value for env) |
 | fullnameOverride | string | `""` |  |
 | global.compatibility.openshift.adaptSecurityContext | string | `"auto"` | Adapt the PostgreSQL dependency security context for OpenShift SCCs. |
@@ -314,7 +356,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | grafana.dashboards.annotations | object | `{}` |  |
 | grafana.dashboards.enabled | bool | `false` |  |
 | grafana.dashboards.labels.grafana_dashboard | string | `"1"` |  |
-| image.digest | string | `"sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b"` | Immutable multi-platform image digest. When set, it overrides the tag. |
+| image.digest | string | `"sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a"` | Immutable multi-platform image digest. When set, it overrides the tag. |
 | image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. (could be overwritten by global.image.pullPolicy) |
 | image.registry | string | `"ghcr.io"` | image registry (could be overwritten by global.image.registry) |
 | image.repository | string | `"paperless-ngx/paperless-ngx"` | image repository |
@@ -362,7 +404,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | prometheus.rules.additionalRules | list | `[]` |  |
 | prometheus.rules.enabled | bool | `false` |  |
 | prometheus.rules.labels | object | `{}` |  |
-| prometheus.servicemonitor.enabled | bool | `false` | broken, Host need to be localhost on request (instatt of ip) needs: https://github.com/prometheus-operator/prometheus-operator/pull/7003 |
+| prometheus.servicemonitor.enabled | bool | `false` | Enable Flower scraping. Requires the ServiceMonitor CRD and env.PAPERLESS_ENABLE_FLOWER=true. |
 | prometheus.servicemonitor.interval | string | `nil` | interval |
 | prometheus.servicemonitor.labels | object | `{}` |  |
 | prometheus.servicemonitor.scrapeTimeout | string | `nil` | scrape timeout |
@@ -404,7 +446,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | valkey.dataStorage.className | string | `""` |  |
 | valkey.dataStorage.keepPvc | bool | `true` |  |
 | valkey.dbid | int | `0` | Database ID for non-default database |
-| valkey.image.tag | string | `"9.0.5@sha256:2437dbc85bb67005fa7db135dfbc45075b800f4afa1ab2a301e3b878b0c273e2"` |  |
+| valkey.image.tag | string | `"9.0.5@sha256:4c64dfeae602349cd38b70ecfc631ab99624283cd975f34f96a72c6050f1b890"` |  |
 | valkey.internal | bool | `true` |  |
 | valkey.service.port | int | `6379` | Internal Valkey service port. The bundled chart currently requires 6379. |
 | valkey.tls.enabled | bool | `false` | TLS is unsupported for the bundled broker. Disable the bundled broker and configure a rediss:// URL through config.redis.existingSecret. |

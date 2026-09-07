@@ -22,6 +22,7 @@ LOCAL_PORT=${LOCAL_PORT:-18000}
 BASE_CHART_VERSION=${BASE_CHART_VERSION:-0.3.23}
 BASE_CHART_REPOSITORY=${BASE_CHART_REPOSITORY:-https://codeopsms.github.io/paperless-ngx-helm-chart/}
 BASE_CHART_PACKAGE=${BASE_CHART_PACKAGE:-}
+BASE_PAPERLESS_VERSION=
 CLEANUP_NAMESPACE=${CLEANUP_NAMESPACE:-false}
 PAPERLESS_ADMIN_USER=${PAPERLESS_ADMIN_USER:-e2e-admin}
 PAPERLESS_ADMIN_PASSWORD=${PAPERLESS_ADMIN_PASSWORD:-paperless-e2e-password}
@@ -84,6 +85,8 @@ common_values=(
   --set-string config.url=http://paperless.local
   --set-string env.PAPERLESS_TIME_ZONE=UTC
   --set env.PAPERLESS_CONSUMER_DELETE_DUPLICATES=true
+  --set autoscaling.enabled=false
+  --set replicaCount=1
   --set networkPolicy.enabled=true
   --set-string persistence.size=1Gi
   --set-string postgresql.primary.persistence.size=2Gi
@@ -599,7 +602,7 @@ seed_data() {
     [[ "$id" =~ ^[0-9]+$ ]]
   done
 
-  if [[ "$MODE" == "upgrade" ]]; then
+  if [[ "$MODE" == "upgrade" && "$BASE_PAPERLESS_VERSION" == "2.20.15" ]]; then
     saved_view_query='note:E2E AND custom_field:E2E'
   else
     saved_view_query=$EXPECTED_SAVED_VIEW_QUERY
@@ -858,6 +861,7 @@ verify_runtime_versions() {
 
   valkey_version=$(kube exec -n "$NAMESPACE" "$valkey_pod" -- valkey-server --version)
   [[ "$valkey_version" == *"v=9.0.5"* ]]
+  echo "Runtime dependencies verified: PostgreSQL ${postgres_version}; ${valkey_version}"
 }
 
 database_inventory() {
@@ -940,11 +944,12 @@ verify_paperless3_status() {
       and .tasks.summary.pending_count == 0
       and .tasks.summary.failure_count == 0
     ' <<<"$status" >/dev/null; then
+      jq '{pngx_version,database:{status:.database.status,unapplied_migrations:.database.migration_status.unapplied_migrations},tasks:{redis_status:.tasks.redis_status,celery_status:.tasks.celery_status,index_status:.tasks.index_status,summary:.tasks.summary}}' <<<"$status"
       return 0
     fi
     sleep 5
   done
-  jq '{pngx_version,database,tasks:{redis_status:.tasks.redis_status,celery_status:.tasks.celery_status,index_status:.tasks.index_status,summary:.tasks.summary}}' \
+  jq '{pngx_version,database:{status:.database.status,unapplied_migrations:.database.migration_status.unapplied_migrations},tasks:{redis_status:.tasks.redis_status,celery_status:.tasks.celery_status,index_status:.tasks.index_status,summary:.tasks.summary}}' \
     <<<"$status" >&2
   echo "Paperless 3 status did not become healthy" >&2
   return 1
@@ -961,27 +966,104 @@ install_candidate() {
     --set strategy.type=RollingUpdate \
     --set strategy.rollingUpdate.maxSurge=0 \
     --set-string strategy.rollingUpdate.maxUnavailable=100% \
+    --set-string env.PAPERLESS_SEARCH_LANGUAGE=de \
     "${common_values[@]}"
   verify_candidate_rollout_safety
 }
 
 install_upgrade_base() {
+  local base_chart
+  local version_args=()
   if [[ -n "$BASE_CHART_PACKAGE" ]]; then
-    helm_cluster "$BASE_HELM_BIN" upgrade --install "$RELEASE" "$BASE_CHART_PACKAGE" \
-      --namespace "$NAMESPACE" \
-      --wait \
-      --timeout 40m \
-      "${common_values[@]}"
+    base_chart=$BASE_CHART_PACKAGE
   else
     "$BASE_HELM_BIN" repo add paperless-e2e-base "$BASE_CHART_REPOSITORY" --force-update
     "$BASE_HELM_BIN" repo update paperless-e2e-base
-    helm_cluster "$BASE_HELM_BIN" upgrade --install "$RELEASE" paperless-e2e-base/paperless-ngx \
-      --version "$BASE_CHART_VERSION" \
-      --namespace "$NAMESPACE" \
-      --wait \
-      --timeout 40m \
-      "${common_values[@]}"
+    base_chart=paperless-e2e-base/paperless-ngx
+    version_args=(--version "$BASE_CHART_VERSION")
   fi
+  BASE_PAPERLESS_VERSION=$("$BASE_HELM_BIN" show chart "$base_chart" ${version_args[@]+"${version_args[@]}"} \
+    | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2 }')
+  case "$BASE_PAPERLESS_VERSION" in
+    2.20.15) API_ACCEPT=application/json ;;
+    3.0.5) API_ACCEPT='application/json; version=10' ;;
+    *)
+      echo "Unsupported baseline appVersion: ${BASE_PAPERLESS_VERSION:-missing}" >&2
+      return 1
+      ;;
+  esac
+  echo "Upgrade baseline: Paperless ${BASE_PAPERLESS_VERSION} (${base_chart})"
+  helm_cluster "$BASE_HELM_BIN" upgrade --install "$RELEASE" "$base_chart" \
+    ${version_args[@]+"${version_args[@]}"} \
+    --namespace "$NAMESPACE" \
+    --wait \
+    --timeout 40m \
+    "${common_values[@]}"
+}
+
+verify_paperless3_runtime_configuration() {
+  local pod
+  local pod_ip
+  pod=$(app_pod)
+  pod_ip=$(kube get pod -n "$NAMESPACE" "$pod" -o jsonpath='{.status.podIP}')
+  # Use the Pod IP Host header as a Prometheus scrape does, not localhost.
+  kube exec -n "$NAMESPACE" "$pod" -- python3 -c '
+import os
+import sys
+import urllib.request
+assert os.environ.get("PAPERLESS_SEARCH_LANGUAGE") == "de"
+pod_ip = sys.argv[1]
+host = "[" + pod_ip + "]" if ":" in pod_ip else pod_ip
+request = urllib.request.Request("http://127.0.0.1:5555/metrics", headers={"Host": host + ":5555"})
+with urllib.request.urlopen(request, timeout=15) as response:
+    payload = response.read().decode()
+    assert response.status == 200
+    assert "flower_" in payload, "Flower metrics missing"
+print("Explicit search language de and Flower metrics with Pod-IP Host verified")
+' "$pod_ip"
+}
+
+consume_atomic_document() {
+  local pod
+  local attempt
+  local document_id
+  local fixture_hash
+  local fixture="${WORK_DIR}/consume-document.pdf"
+  local downloaded="${WORK_DIR}/consume-download.pdf"
+  local filename="e2e-consume-${RUN_ID}.pdf"
+  curl --fail --silent --show-error --location --retry 3 \
+    https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/v2.20.15/src/documents/tests/samples/double-sided-odd.pdf \
+    --output "$fixture"
+  [[ -s "$fixture" ]]
+  fixture_hash=$(sha256_file "$fixture")
+  pod=$(app_pod)
+  # The built-in ._ exclusion hides partial input. Rename within the same
+  # mount: moving from export would cross Kubernetes subPath bind mounts and
+  # could degrade to a non-atomic copy even though both paths use the same PVC.
+  kube exec -i -n "$NAMESPACE" "$pod" -- s6-setuidgid paperless sh -ceu '
+    filename=$1
+    staged="/usr/src/paperless/consume/._${filename}"
+    destination="/usr/src/paperless/consume/${filename}"
+    test ! -e "$staged"
+    test ! -e "$destination"
+    cat >"$staged"
+    test -s "$staged"
+    mv "$staged" "$destination"
+  ' sh "$filename" <"$fixture"
+  for attempt in $(seq 1 180); do
+    document_id=$(api_request GET "/api/documents/?original_filename__iexact=${filename}" \
+      | json_results \
+      | jq -r --arg filename "$filename" '[.[] | select(.original_file_name == $filename)] | if length == 1 then .[0].id else empty end')
+    if [[ "$document_id" =~ ^[0-9]+$ ]]; then
+      api_request GET "/api/documents/${document_id}/download/?original=true" --output "$downloaded"
+      [[ "$(sha256_file "$downloaded")" == "$fixture_hash" ]]
+      echo "Atomic consume-folder ingestion and original SHA-256 verified"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Atomic consume-folder document was not ingested after ${attempt} attempts" >&2
+  return 1
 }
 
 run_helm_test() {
@@ -999,8 +1081,10 @@ if [[ "$MODE" == "fresh" ]]; then
   authenticate
   seed_data
   verify_data
+  consume_atomic_document
   verify_paperless3_status
   verify_runtime_versions
+  verify_paperless3_runtime_configuration
   run_helm_test
 else
   install_upgrade_base
@@ -1048,8 +1132,10 @@ else
   start_port_forward
   verify_data
   consume_post_upgrade_document
+  consume_atomic_document
   verify_paperless3_status
   verify_runtime_versions
+  verify_paperless3_runtime_configuration
   run_helm_test
 fi
 

@@ -31,10 +31,13 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 
 > **Experimental preview:** Chart `{{ template "chart.version" . }}` deploys
 > Paperless-ngx {{ template "chart.appVersion" . }} and is not the stable default. Chart `0.3.23`
-> with Paperless-ngx `2.20.15` remains the production/stable release.
+> with Paperless-ngx `2.20.15` remains the historical stable/default channel.
+> The experimental label applies to this chart; Paperless-ngx {{ template "chart.appVersion" . }} is an
+> upstream stable release and includes newer security fixes.
 
 This experimental chart deploys Paperless-ngx {{ template "chart.appVersion" . }} with optional PostgreSQL and
-Valkey dependencies. The default deployment uses PostgreSQL 17.6 and Valkey
+Valkey dependencies. The default deployment retains legacy PostgreSQL 17.6 for
+upgrade testing and uses Valkey
 {{ template "value.valkey.appVersion" . }}. All default container images are pinned to immutable multi-platform
 digests.
 
@@ -55,12 +58,18 @@ digests.
 
 - Kubernetes `1.34` or newer
 - Helm 3 or Helm 4 (the exact maintained versions are pinned in CI)
-- An x86-64-v2 capable CPU on amd64, or a supported arm64 node
+- An x86-64-v2 capable CPU on amd64 for classifier support, or a supported arm64 node
 - Persistent storage for production use
 
 Kubernetes 1.34 is the chart's intentional maintained-and-tested support floor,
 not a claim that every rendered Kubernetes API first appeared in 1.34. Older
 clusters are rejected because they are outside this release's CI/support matrix.
+
+On older amd64 CPUs without SSE4.2, upstream documents a restricted setup with
+`PAPERLESS_TRAIN_TASK_CRON=disable` that gives up classifier-based matching.
+The separate 3.0.5 OCR failure on this hardware is fixed in the 3.1 line; test
+the actual hardware before relying on this configuration. See
+[UPGRADE-0.4.md](UPGRADE-0.4.md) for details.
 
 The tested dependency versions for chart {{ template "chart.version" . }} are:
 
@@ -70,12 +79,16 @@ The tested dependency versions for chart {{ template "chart.version" . }} are:
 | Valkey | `{{ template "dependency.valkey.version" . }}` | `{{ template "value.valkey.appVersion" . }}` |
 
 The bundled `bitnamilegacy/postgresql` image is archived and no longer
-maintained. It remains in the 0.4 release line only for compatibility with the
-validated Paperless 2-to-3 migration. For a new or production installation,
+maintained. PostgreSQL 17.6 is a legacy test baseline, not a current security
+release. It remains in the 0.4 release line for compatibility with historical
+upgrade baselines. For a new or production installation,
 disable the bundled database and use a maintained external PostgreSQL 17
-service ([currently PostgreSQL 17.10](https://www.postgresql.org/docs/17/release-17-10.html))
+service ([17.11 at this review](https://www.postgresql.org/docs/17/release-17-11.html))
 with independent backups and lifecycle management. Moving the bundled
 dependency to PostgreSQL 18 is intentionally outside this migration release.
+The Docker Official PostgreSQL image is not a drop-in replacement for the
+Bitnami chart's entrypoint, environment variables, or data layout; do not change
+only `postgresql.image.repository` to migrate a database.
 
 ## Installation
 
@@ -197,7 +210,9 @@ indexes that published repository directly.
 The repository name is part of the Artifact Hub package URL and cannot be
 changed after registration.
 
-## Upgrading from chart 0.3.x
+## Upgrading
+
+### From chart 0.3.x and Paperless 2
 
 Experimental chart {{ template "chart.version" . }} is a breaking upgrade from Paperless-ngx 2.20.15 to {{ template "chart.appVersion" . }}. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
@@ -211,6 +226,32 @@ PostgreSQL remains at 17.6, while Valkey is updated within major version 9 from
 9.0.2 to {{ template "value.valkey.appVersion" . }}. No database-engine or broker major migration is performed by
 chart {{ template "chart.version" . }}.
 
+### Upgrading the previous Paperless 3 preview
+
+Chart `0.4.0-experimental.1` with Paperless `3.0.5` can upgrade directly to
+`{{ template "chart.version" . }}` with Paperless `{{ template "chart.appVersion" . }}`.
+Its existing v3 database does not need the v2 migration prerequisite or another
+Whoosh/checksum conversion. Back up and rehearse recovery, drain tasks, stop
+the application completely, and apply the reviewed values to the same database,
+Secrets, and PVCs as described in [UPGRADE-0.4.md](UPGRADE-0.4.md).
+
+Paperless 3.1 fixes the explicit `PAPERLESS_SEARCH_LANGUAGE` startup failure,
+orphaned Tantivy segment growth, and custom-field workflow assignment problems
+documented for 3.0.5. Search language is supported again; changing it rebuilds
+the index. Version 3.1.3 includes the fix for
+[GHSA-2jhj-xqrq-rmrq](https://github.com/paperless-ngx/paperless-ngx/security/advisories/GHSA-2jhj-xqrq-rmrq),
+uses Python 3.14 in the official image, and respects archive settings for remote
+OCR. Review optional OIDC role synchronization and remote OCR settings before
+using them. API versions remain 9 and 10. Tika 4 and some complex Whoosh saved
+queries remain incompatible, and network-scanner partial-file delivery needs
+an environment-specific test; the upgrade guide covers these limitations.
+
+`env.PAPERLESS_ENABLE_FLOWER` now requires a YAML boolean. Set `false` to
+disable Flower; the chart renders an empty environment value because the image
+treats non-empty strings such as `"false"` as enabled. A ServiceMonitor requires
+both `prometheus.servicemonitor.enabled=true` and
+`env.PAPERLESS_ENABLE_FLOWER=true`.
+
 ## Scaling and availability
 
 `replicaCount`, HPA, and the RollingUpdate budgets remain configurable. The
@@ -218,8 +259,8 @@ strategy type stays `RollingUpdate` because Helm 4 server-side apply cannot
 safely clear the old `rollingUpdate` field during a live switch to `Recreate`.
 The default (`maxSurge: 0`, `maxUnavailable: 100%`) avoids creating an extra
 application pod. It is not a substitute for the explicit scale-to-zero and
-complete pod-termination wait in the upgrade guide, which prevents Paperless 2
-and 3 from overlapping during the irreversible database migration. This
+complete pod-termination wait in the upgrade guide, which prevents old and new
+Paperless versions from overlapping during database migrations. This
 disruptive default causes downtime on every rollout until the budgets are
 changed after the migration has been accepted. The chart still runs
 the Paperless web server, consumer, scheduler, and worker processes together in
@@ -241,7 +282,8 @@ helm-unittest, fixed dependency-archive and container-image digests, Kubernetes
 server-side dry runs, and a required Kubernetes 1.36 installation. One candidate
 package is reused byte-for-byte by all installation and upgrade jobs. The
 Paperless 3 upgrade PR and the daily workflow additionally test fresh installs
-on Kubernetes 1.34-1.36 and Paperless 2.20.15-to-{{ template "chart.appVersion" . }} upgrades across Helm 3 and Helm 4.
+on Kubernetes 1.34-1.36 and upgrades from Paperless 2.20.15 and the previous
+Paperless 3.0.5 preview across Helm 3 and Helm 4.
 
 | Update | Automation policy |
 |--------|-------------------|
