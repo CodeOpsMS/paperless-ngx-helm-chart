@@ -99,6 +99,34 @@ certificate verification enabled.
 
 ## Run the isolated upgrade tests
 
+### Check whether the production topology matches the test
+
+The runner validates the bundled PostgreSQL/Valkey topology with synthetic
+data and newly provisioned storage. A successful run on a production cluster
+does **not** validate every integration used by its existing Paperless release.
+Before planning a production upgrade, inventory all workloads that access the
+same database, broker, and media/search storage, including separate web-only
+Deployments, workers, CronJobs, and independently managed Fleet/GitOps releases.
+The main chart cannot stop or update workloads owned by another release.
+
+For split deployments, suspend the relevant reconciliation and autoscaling,
+drain tasks, and stop **all** old application processes before applying the v3
+migrations. Update every component to the same reviewed Paperless version
+before resuming it. Scaling down only the main chart's Deployment is
+insufficient when another web release still uses the same database and index.
+Do not suspend or modify production controllers as part of this isolated test.
+
+Preserve external database/Sentinel configuration, custom Django settings
+modules, existing Secret references, and the existing NFS/RWX claim where
+present; do not accidentally enable bundled backends or allocate replacement
+application storage. Rehearse that topology separately on restored, isolated
+data. A custom settings module may override Paperless 3 broker/serializer or
+cache defaults and requires its own source-level review. Record the actual
+StorageClass selected for test PVCs, especially when a cluster has multiple
+default StorageClasses; CSI/RWO test volumes do not prove NFS/RWX behavior.
+
+### Execute each baseline
+
 For each selected baseline, the runner creates only synthetic
 objects and upstream test-fixture PDFs, rehearses a PostgreSQL logical restore,
 scales the application to zero, upgrades the exact candidate, and verifies
