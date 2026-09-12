@@ -14,13 +14,12 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 > It is not an official Paperless-ngx chart and does not receive official
 > support from the Paperless-ngx project.
 
-> **Experimental preview:** Chart `0.4.0-experimental.2` deploys
-> Paperless-ngx 3.1.3 and is not the stable default. Chart `0.3.23`
-> with Paperless-ngx `2.20.15` remains the historical stable/default channel.
-> The experimental label applies to this chart; Paperless-ngx 3.1.3 is an
-> upstream stable release and includes newer security fixes.
+> **Stable Paperless 3 release:** Chart `0.4.0` deploys
+> Paperless-ngx 3.1.3 and replaces `0.3.23` as the stable default.
+> Existing Paperless 2 installations must follow [UPGRADE-0.4.md](UPGRADE-0.4.md)
+> before upgrading. Pin `--version 0.3.23` until that migration is prepared.
 
-This experimental chart deploys Paperless-ngx 3.1.3 with optional PostgreSQL and
+This chart deploys Paperless-ngx 3.1.3 with optional PostgreSQL and
 Valkey dependencies. The default deployment retains legacy PostgreSQL 17.6 for
 upgrade testing and uses Valkey
 9.0.5. All default container images are pinned to immutable multi-platform
@@ -58,7 +57,7 @@ The separate 3.0.5 OCR failure on this hardware is fixed in the 3.1 line; test
 the actual hardware before relying on this configuration. See
 [UPGRADE-0.4.md](UPGRADE-0.4.md) for details.
 
-The tested dependency versions for chart 0.4.0-experimental.2 are:
+The tested dependency versions for chart 0.4.0 are:
 
 | Component | Chart | Application |
 |-----------|-------|-------------|
@@ -79,49 +78,44 @@ only `postgresql.image.repository` to migrate a database.
 
 ## Installation
 
-### Stable Helm repository install (Paperless 2)
+### Stable Helm repository install (Paperless 3)
 
 ```bash
 helm repo add paperless https://codeopsms.github.io/paperless-ngx-helm-chart/
 helm repo update
 helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.3.23 \
+  --version 0.4.0 \
   --namespace paperless-ngx \
   --create-namespace
 ```
 
-Helm ignores prereleases during normal version resolution, so an install without
-`--version` also remains on stable chart `0.3.23`. Select the experimental chart
-only by its exact version:
+Normal Helm version resolution now selects the stable Paperless 3 chart.
+An unpinned `helm upgrade` of a Paperless 2 installation therefore crosses a
+breaking application/database migration. Do not upgrade until the migration
+guide, backups, and full application shutdown have been addressed.
 
-```bash
-helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.4.0-experimental.2 \
-  --namespace paperless-ngx-experimental \
-  --create-namespace
-```
-
-### Experimental OCI install (Paperless 3)
+### Stable OCI install (Paperless 3)
 
 ```bash
 helm install paperless-ngx \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0-experimental.2 \
+  --version 0.4.0 \
   --namespace paperless-ngx \
   --create-namespace
 ```
 
-GHCR keeps both published chart versions addressable by version:
+Historical chart versions remain addressable by explicit version:
 
 | Chart version | Paperless-ngx | Purpose |
 |---------------|---------------|---------|
 | `0.3.23` | `2.20.15` | Last Paperless 2 release |
-| `0.4.0-experimental.2` | `3.1.3` | Experimental Paperless 3 preview |
+| `0.4.0-experimental.1` | `3.0.5` | Historical Paperless 3 preview |
+| `0.4.0` | `3.1.3` | Current stable Paperless 3 release |
 
 Chart 0.3.23 remains available for existing Paperless 2 installations, but it
 is a historical release and does not receive Paperless 3 fixes or current
-security updates. It nevertheless remains the stable/default channel while the
-Paperless 3 chart is experimental.
+security updates. It is no longer the default; select it explicitly when
+maintaining a Paperless 2 installation pending a controlled migration.
 
 Use distinct release names and namespaces to run both versions in parallel:
 
@@ -134,7 +128,7 @@ helm install paperless-v2 \
 
 helm install paperless-v3 \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0-experimental.2 \
+  --version 0.4.0 \
   --namespace paperless-v3 \
   --create-namespace
 ```
@@ -201,7 +195,7 @@ changed after registration.
 
 ### From chart 0.3.x and Paperless 2
 
-Experimental chart 0.4.0-experimental.2 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.1.3. Do not
+Chart 0.4.0 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.1.3. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
 rely on `helm rollback` after the database migration has run.
 
@@ -211,12 +205,12 @@ procedure, controlled application shutdown, validation, and recovery steps.
 
 PostgreSQL remains at 17.6, while Valkey is updated within major version 9 from
 9.0.2 to 9.0.5. No database-engine or broker major migration is performed by
-chart 0.4.0-experimental.2.
+chart 0.4.0.
 
 ### Upgrading the previous Paperless 3 preview
 
 Chart `0.4.0-experimental.1` with Paperless `3.0.5` can upgrade directly to
-`0.4.0-experimental.2` with Paperless `3.1.3`.
+`0.4.0` with Paperless `3.1.3`.
 Its existing v3 database does not need the v2 migration prerequisite or another
 Whoosh/checksum conversion. Back up and rehearse recovery, drain tasks, stop
 the application completely, and apply the reviewed values to the same database,
@@ -268,7 +262,7 @@ Every change is checked with Helm 3 and Helm 4, a strict values schema,
 helm-unittest, fixed dependency-archive and container-image digests, Kubernetes
 server-side dry runs, and a required Kubernetes 1.36 installation. One candidate
 package is reused byte-for-byte by all installation and upgrade jobs. The
-Paperless 3 upgrade PR and the daily workflow additionally test fresh installs
+Paperless update PRs, release branches, and the daily workflow additionally test fresh installs
 on Kubernetes 1.34-1.36 and upgrades from Paperless 2.20.15 and the previous
 Paperless 3.0.5 preview across Helm 3 and Helm 4.
 
@@ -278,12 +272,12 @@ Paperless 3.0.5 preview across Helm 3 and Helm 4.
 | Paperless major | Requires a manually prepared migration PR |
 | PostgreSQL/Valkey charts | Renovate opens separate review PRs |
 | GitHub-owned Actions patch | A small allowlist may auto-merge after required checks; all other updates require review |
-| Releases | A successful `main` CI run promotes its exact tested candidate; prerelease charts stay non-latest and are marked experimental |
+| Releases | A successful `main` CI run promotes its exact tested candidate; stable charts become Latest and the normal Helm default |
 
 GitHub Pages is active. The Pages healthcheck verifies Artifact Hub repository
 metadata and byte-identical SHA-256 chart packages across Pages, GitHub
 Releases, and anonymous OCI access every day. It checks the latest stable
-release, the current experimental release, and the historical 0.3.23 baseline.
+release, the current chart, and the historical 0.3.23 baseline.
 
 ## License and provenance
 

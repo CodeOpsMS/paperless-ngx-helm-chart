@@ -102,6 +102,37 @@ dependency:
         with self.assertRaises(ValueError):
             updater.next_chart_version("0.4.0-rc.1")
 
+    def test_stable_updates_do_not_reintroduce_preview_channel(self):
+        for target in ("3.0.5", "3.1.3"):
+            with self.subTest(target=target):
+                chart_path = self.root / "Chart.yaml"
+                chart = chart_path.read_text().replace(
+                    'version: "0.4.0-experimental.1"', 'version: "0.4.0"'
+                ).replace('artifacthub.io/prerelease: "true"', 'artifacthub.io/prerelease: "false"')
+                chart_path.write_text(chart)
+                pages_path = self.root / ".github/pages/index.html"
+                pages_path.write_text("Current stable --version 0.4.0; historical --version 0.3.23")
+                before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+                self.assertEqual(updater.update(self.root, target, NEW_DIGEST), "0.4.1")
+                self.assertIn('version: "0.4.1"', chart_path.read_text())
+                self.assertIn('artifacthub.io/prerelease: "false"', chart_path.read_text())
+                self.assertIn("Current stable --version 0.4.1", pages_path.read_text())
+                self.assertIn("historical --version 0.3.23", pages_path.read_text())
+                self.assertEqual((self.root / "UPGRADE-0.4.md").read_text(), self.history)
+                for path, contents in before.items():
+                    path.write_bytes(contents)
+
+    def test_inconsistent_release_channel_fails_without_writes(self):
+        chart_path = self.root / "Chart.yaml"
+        chart_path.write_text(chart_path.read_text().replace(
+            'artifacthub.io/prerelease: "true"', 'artifacthub.io/prerelease: "false"'
+        ))
+        before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        with self.assertRaisesRegex(ValueError, "prerelease status disagree"):
+            updater.update(self.root, "3.1.3", NEW_DIGEST)
+        for path, contents in before.items():
+            self.assertEqual(path.read_bytes(), contents)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -143,7 +143,7 @@ jobs:
             release_flags=()
             if [[ "$CHART_PRERELEASE" == "true" ]]; then
               release_title="[EXPERIMENTAL] ${tag}"
-              release_notes="EXPERIMENTAL Paperless-ngx 3 Helm chart ${CHART_VERSION}. Stable chart 0.3.23 remains the default. Read UPGRADE-0.4.md before testing an upgrade."
+              release_notes="EXPERIMENTAL Paperless-ngx 3 Helm chart ${CHART_VERSION}. The latest stable chart remains the default. Read UPGRADE-0.4.md before testing an upgrade."
               release_flags+=(--prerelease --latest=false)
             fi
             gh release create "$tag" \
@@ -548,9 +548,9 @@ jobs:
               exit 1
             fi
             if [[ "$CHART_PRERELEASE" == "true" ]]; then
-              gh release edit "$tag" --draft=false --prerelease
+              gh release edit "$tag" --draft=false --prerelease --latest=false
             else
-              gh release edit "$tag" --draft=false
+              gh release edit "$tag" --draft=false --prerelease=false --latest
             fi
             git fetch --tags --force
             tag_commit=$(git rev-parse "${tag}^{commit}")
@@ -572,6 +572,15 @@ jobs:
           fi
           if [[ "$(jq -r '.isPrerelease' <<<"$final_metadata")" != "$CHART_PRERELEASE" ]]; then
             echo "::error::Published GitHub release has the wrong prerelease status"
+            exit 1
+          fi
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          if [[ "$CHART_PRERELEASE" == "false" && "$latest_tag" != "$tag" ]]; then
+            echo "::error::Stable release ${tag} did not become GitHub Latest (${latest_tag})"
+            exit 1
+          fi
+          if [[ "$CHART_PRERELEASE" == "true" && "$latest_tag" == "$tag" ]]; then
+            echo "::error::A prerelease must not become GitHub Latest"
             exit 1
           fi
           echo "Published immutable GitHub release ${tag}: ${expected_sha}"

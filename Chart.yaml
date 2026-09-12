@@ -7,7 +7,7 @@ type: application
 kubeVersion: ">=1.34.0-0"
 icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.4.0-experimental.2"
+version: "0.4.0"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "3.1.3"
 keywords:
@@ -25,11 +25,11 @@ sources:
   - https://github.com/paperless-ngx/paperless-ngx
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 annotations:
-  artifacthub.io/prerelease: "true"
+  artifacthub.io/prerelease: "false"
   artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
     - kind: changed
-      description: Keep Paperless-ngx 3.1.3 opt-in and experimental alongside stable chart 0.3.23
+      description: Promote the validated Paperless-ngx 3.1.3 chart to stable 0.4.0; retain 0.3.23 as the explicitly pinned Paperless 2 baseline
     - kind: changed
       description: Upgrade Paperless-ngx from 3.0.5 to 3.1.3 including the 3.1.2 security fix GHSA-2jhj-xqrq-rmrq and 3.1.3 hardening
     - kind: added

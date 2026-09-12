@@ -3,7 +3,7 @@
 The pull-request workflow uploads the exact packaged candidate as the immutable,
 attempt-specific artifact
 `paperless-ngx-candidate-<run-id>-<run-attempt>`. Kind validates that candidate
-on Kubernetes 1.34-1.36. Before releasing `0.4.0-experimental.2`, the same
+on Kubernetes 1.34-1.36. Before releasing `0.4.0`, the same
 artifact must pass real-cluster acceptance using the `suseai` context and new,
 isolated test namespaces. This document describes required checks; it is not
 evidence that the current candidate has passed them.
@@ -39,9 +39,9 @@ Identify the successful Helm CI run for the upgrade PR and download its
 candidate without rebuilding it locally:
 
 ```bash
-gh run list --workflow helm-ci.yml --branch chore/update-paperless-ngx-3.1.3
+gh run list --workflow helm-ci.yml --branch codex/release-0.4.0
 gh run download <run-id> --name paperless-ngx-candidate-<run-id>-<run-attempt> \
-  --dir /tmp/paperless-ngx-0.4.0-experimental.2-candidate
+  --dir /tmp/paperless-ngx-0.4.0-candidate
 ```
 
 Record the SHA-256 hash of the downloaded package in the PR acceptance comment.
@@ -178,7 +178,7 @@ NAMESPACE=paperless-v2-to-v313-e2e \
 RELEASE=paperless-v3-e2e \
 CLEANUP_NAMESPACE=false \
 scripts/paperless-e2e.sh upgrade \
-  /tmp/paperless-ngx-0.4.0-experimental.2-candidate/paperless-ngx-0.4.0-experimental.2.tgz
+  /tmp/paperless-ngx-0.4.0-candidate/paperless-ngx-0.4.0.tgz
 ```
 
 Repeat for the existing Paperless 3 preview in a different namespace. The
@@ -196,7 +196,7 @@ NAMESPACE=paperless-v305-to-v313-e2e \
 RELEASE=paperless-v3-e2e \
 CLEANUP_NAMESPACE=false \
 scripts/paperless-e2e.sh upgrade \
-  /tmp/paperless-ngx-0.4.0-experimental.2-candidate/paperless-ngx-0.4.0-experimental.2.tgz
+  /tmp/paperless-ngx-0.4.0-candidate/paperless-ngx-0.4.0.tgz
 ```
 
 Omit `BASE_CHART_PACKAGE` to download the selected `BASE_CHART_VERSION` from
@@ -226,7 +226,9 @@ separately when they differ from the tested defaults.
 
 ## Evidence and cleanup
 
-Attach the following to PR #12 separately for each baseline:
+Retain the following privately for each baseline, and attach a sanitized
+summary to the release PR. Never publish cluster hostnames, credentials,
+production resource inventories, or complete Helm values:
 
 - candidate package SHA-256, baseline version, and baseline package SHA-256;
 - generated E2E `RUN_ID` and verified Kubernetes API server;

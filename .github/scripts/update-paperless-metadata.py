@@ -54,6 +54,10 @@ def update(root: Path, version: str, digest: str) -> str:
     if old_parts[0] != new_parts[0] or new_parts < old_parts:
         raise ValueError("Major upgrades and downgrades require a manual migration PR")
     new_chart_version = next_chart_version(old_chart_version)
+    prerelease_status = field(chart, "  artifacthub.io/prerelease")
+    expected_prerelease = "true" if "-" in old_chart_version else "false"
+    if prerelease_status != expected_prerelease:
+        raise ValueError("Chart version and Artifact Hub prerelease status disagree")
     image_block = re.search(r"(?ms)^image:\n(?P<body>.*?)(?=^\S|\Z)", values)
     if image_block is None:
         raise ValueError("Missing top-level image configuration")

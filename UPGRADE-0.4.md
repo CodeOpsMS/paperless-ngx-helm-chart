@@ -1,9 +1,11 @@
-# Upgrade to experimental chart 0.4.0-experimental.2 and Paperless-ngx 3
+# Upgrade to stable chart 0.4.0 and Paperless-ngx 3
 
-Chart `0.4.0-experimental.2` is an opt-in prerelease for Paperless-ngx 3.1.3.
+Chart `0.4.0` is the stable release for Paperless-ngx 3.1.3.
 It supports upgrading the Paperless 2 baseline and the previous Paperless 3
-preview. Chart `0.3.23` remains the stable default and normal Helm search/install
-operations do not select this prerelease. That historical channel is not a
+preview. Normal Helm version resolution now selects this Paperless 3 chart.
+Pin `--version 0.3.23` until the migration from Paperless 2 is prepared;
+unversioned upgrades can cross this application/database migration boundary.
+The historical Paperless 2 chart remains available, but is not a
 recommendation to run outdated application or database images in production.
 PostgreSQL stays on 17.6 for the bundled legacy upgrade rehearsal, and Valkey
 uses 9.0.5. Keeping those engines on the same major versions isolates the
@@ -64,9 +66,10 @@ includes the security fix introduced in 3.1.2 for
 [GHSA-2jhj-xqrq-rmrq](https://github.com/paperless-ngx/paperless-ngx/security/advisories/GHSA-2jhj-xqrq-rmrq).
 The advisory lists versions through 3.1.1 as affected by path traversal when
 `PAPERLESS_FILENAME_FORMAT_REMOVE_NONE` is enabled and a user can influence the
-filename template or relevant metadata. Upgrade to the patched release; the
-experimental chart label describes this chart's release channel, not the
-upstream application's release stability.
+filename template or relevant metadata. Upgrade to the patched release.
+The latest upstream release was checked again on 2026-09-12: 3.1.3 is still
+current. Stable chart 0.4.0 removes the preview designation without changing
+the reviewed 3.1.3 application image or introducing a database-engine upgrade.
 
 The [3.1.0 release](https://github.com/paperless-ngx/paperless-ngx/releases/tag/v3.1.0)
 fixes explicit search-language startup, orphaned Tantivy segment growth, and
@@ -213,7 +216,7 @@ its default database. Before shutting down Paperless 2, run its documented
 `decrypt_documents` management command if document or thumbnail encryption was
 ever enabled, and verify that no encrypted files remain.
 
-The `0.4.0-experimental.2` values schema rejects chart-managed settings and
+The `0.4.0` values schema rejects chart-managed settings and
 removed Paperless 2 variables when they are supplied through `env`.
 `env.PAPERLESS_ENABLE_FLOWER` must be a YAML boolean. `false` is rendered as
 an empty environment value so the image actually disables Flower; a quoted
@@ -222,13 +225,13 @@ an empty environment value so the image actually disables Flower; a quoted
 
 ## Values migration
 
-Create a reviewed values file from the `0.4.0-experimental.2` defaults. For
+Create a reviewed values file from the `0.4.0` defaults. For
 chart `0.3.23`, apply the mappings below. For `0.4.0-experimental.1`, retain the
 already migrated Secret references and storage configuration, revalidate the
 values against the new schema, and review the 3.1 changes above. Do not use
 `--reuse-values`.
 
-| Chart 0.3.x | Chart 0.4.0-experimental.2 |
+| Chart 0.3.x | Chart 0.4.0 |
 |-------------|----------------------------|
 | `config.database.pass` for an external database | `config.database.password` or, preferably, `config.database.existingSecret` |
 | `config.database.name` / `user` for the bundled database | Keep their new defaults and configure `postgresql.auth.database` / `username` |
@@ -251,14 +254,14 @@ values against the new schema, and review the 3.1 changes above. Do not use
 | `livenessProbe.httpGet.path` | `livenessProbe.enabled: true` and `livenessProbe.path` |
 | `readinessProbe.httpGet.path` | `readinessProbe.enabled: true` and `readinessProbe.path` |
 | `livenessProbe.httpGet.port` / `readinessProbe.httpGet.port` | Remove; both probes now use the fixed named port `http` |
-| Empty or omitted legacy probe object | Set the corresponding `enabled: false` only when the probe should be disabled; otherwise start from the experimental defaults |
+| Empty or omitted legacy probe object | Set the corresponding `enabled: false` only when the probe should be disabled; otherwise start from the current chart defaults |
 
 Validate the migrated file before touching the cluster:
 
 ```bash
-candidate=/tmp/paperless-ngx-0.4.0-experimental.2.tgz
+candidate=/tmp/paperless-ngx-0.4.0.tgz
 helm pull paperless/paperless-ngx \
-  --version 0.4.0-experimental.2 \
+  --version 0.4.0 \
   --destination /tmp
 
 helm lint "$candidate" \
@@ -379,6 +382,17 @@ been rehearsed.
 
 ## Controlled upgrade
 
+First inventory every workload sharing the database, broker, or media/search
+storage. Separate web Deployments, workers, CronJobs, and Fleet/GitOps releases
+are not stopped by this chart. Suspend their reconciliation and autoscaling,
+drain tasks, and stop **all** old Paperless processes before migration. Upgrade
+every component to the same reviewed application version before resuming it.
+The single-Deployment commands below are insufficient for a split installation.
+Preserve existing external database/Sentinel settings, custom Django settings,
+Secrets, and PVCs. Test custom broker/result-backend configuration and NFS/RWX
+storage on an isolated restored copy; the bundled-backend acceptance test does
+not validate those integrations.
+
 1. Announce maintenance and stop all new consumers and integrations.
 2. Confirm that uploaded documents are processed and no relevant task remains
    pending or running. Confirm the Redis/Valkey broker queue is empty.
@@ -415,7 +429,7 @@ been rehearsed.
 4. Upgrade with the reviewed values file and the exact validated chart package:
 
    ```bash
-   candidate=/tmp/paperless-ngx-0.4.0-experimental.2.tgz
+   candidate=/tmp/paperless-ngx-0.4.0.tgz
    test -f "$candidate"
    helm upgrade paperless-ngx "$candidate" \
      --namespace paperless-ngx \

@@ -534,7 +534,9 @@ jobs:
     name: Full install / Helm ${{ matrix.helm-version }} / Kubernetes ${{ matrix.kubernetes }}
     if: >-
       github.event_name != 'pull_request' ||
-      startsWith(github.head_ref, 'chore/update-paperless-ngx-')
+      startsWith(github.head_ref, 'chore/update-paperless-ngx-') ||
+      startsWith(github.head_ref, 'release/') ||
+      startsWith(github.head_ref, 'codex/release-')
     runs-on: ubuntu-latest
     needs: candidate
     strategy:
@@ -609,7 +611,9 @@ jobs:
     name: Upgrade / ${{ matrix.name }} / Kubernetes ${{ matrix.kubernetes }}
     if: >-
       github.event_name != 'pull_request' ||
-      startsWith(github.head_ref, 'chore/update-paperless-ngx-')
+      startsWith(github.head_ref, 'chore/update-paperless-ngx-') ||
+      startsWith(github.head_ref, 'release/') ||
+      startsWith(github.head_ref, 'codex/release-')
     runs-on: ubuntu-latest
     needs: candidate
     strategy:
