@@ -30,24 +30,26 @@
     <h1>Paperless-ngx Helm Chart Repository</h1>
     <p>This GitHub Pages site hosts the CodeOpsMS Paperless-ngx Helm chart.</p>
 
-    <h2>Stable: Paperless-ngx 2</h2>
+    <h2>Stable: Paperless-ngx 3</h2>
     <pre><code>helm repo add paperless https://codeopsms.github.io/paperless-ngx-helm-chart/
 helm repo update
 helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.3.23</code></pre>
+  --version 0.4.0</code></pre>
 
-    <h2>Experimental: Paperless-ngx 3</h2>
+    <h2>Upgrading from Paperless-ngx 2</h2>
     <p>
-      Chart <code>0.4.0-experimental.1</code> is an opt-in preview. A normal Helm
-      install continues to resolve stable chart <code>0.3.23</code>.
+      Chart <code>0.4.0</code> is the stable default and deploys Paperless-ngx 3.
+      Read the <a href="https://github.com/CodeOpsMS/paperless-ngx-helm-chart/blob/main/UPGRADE-0.4.md">migration guide</a>
+      before upgrading an existing Paperless 2 installation. Pin historical
+      chart <code>0.3.23</code> until its database and storage migration is prepared.
     </p>
     <pre><code>helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.4.0-experimental.1</code></pre>
+  --version 0.3.23</code></pre>
 
-    <h2>Experimental OCI install</h2>
+    <h2>Stable OCI install</h2>
     <pre><code>helm install paperless-ngx \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0-experimental.1</code></pre>
+  --version 0.4.0</code></pre>
 
     <p><a href="index.yaml">Helm repository index</a></p>
     <p><a href="artifacthub-repo.yml">Artifact Hub metadata</a></p>

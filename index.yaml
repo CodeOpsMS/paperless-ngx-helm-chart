@@ -3,6 +3,85 @@ entries:
   paperless-ngx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: added
+          description: Gate publication on GitHub-hosted Kubernetes acceptance of the exact candidate and source commit; keep external rehearsals optional
+        - kind: added
+          description: Test broker priority queues and worker state, actual Prometheus scraping and enforced metrics NetworkPolicy
+        - kind: changed
+          description: Promote the validated Paperless-ngx 3.1.3 chart to stable 0.4.0; retain 0.3.23 as the explicitly pinned Paperless 2 baseline
+        - kind: changed
+          description: Upgrade Paperless-ngx from 3.0.5 to 3.1.3 including the 3.1.2 security fix GHSA-2jhj-xqrq-rmrq and 3.1.3 hardening
+        - kind: added
+          description: Test upgrades from both stable 0.3.23 and published 0.4.0-experimental.1
+        - kind: fixed
+          description: Restore explicit PAPERLESS_SEARCH_LANGUAGE after the upstream 3.1.0 startup fix
+        - kind: fixed
+          description: Render valid Prometheus alert groups and disable Flower consistently when configured false
+        - kind: fixed
+          description: Refresh the immutable Valkey 9.0.5 manifest digest after the upstream tag was republished
+        - kind: fixed
+          description: Preserve reviewed update branches and historical migration notes in release automation
+        - kind: fixed
+          description: Validate remote OCR mode and require enabled Flower for a ServiceMonitor
+        - kind: changed
+          description: Update migration guidance for fixed 3.0 issues, Python 3.14, remote OCR, and remaining legacy database limitations
+      artifacthub.io/containsSecurityUpdates: "true"
+      artifacthub.io/images: |
+        - name: Paperless-ngx
+          image: ghcr.io/paperless-ngx/paperless-ngx@sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a
+        - name: PostgreSQL
+          image: docker.io/bitnamilegacy/postgresql@sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d
+        - name: Valkey
+          image: docker.io/valkey/valkey:9.0.5@sha256:4c64dfeae602349cd38b70ecfc631ab99624283cd975f34f96a72c6050f1b890
+        - name: Helm test
+          image: docker.io/library/busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+      artifacthub.io/links: |
+        - name: Chart source
+          url: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+        - name: Paperless-ngx project
+          url: https://github.com/paperless-ngx/paperless-ngx
+        - name: Forked from WrenIX
+          url: https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 3.1.3
+    created: "2026-09-12T15:44:19.503120323Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: oci://docker.io/bitnamicharts
+      version: 16.7.27
+    - condition: valkey.internal
+      name: valkey
+      repository: https://valkey.io/valkey-helm/
+      version: 0.9.4
+    description: A community Helm chart for Paperless-ngx, a document management system
+      that transforms physical documents into a searchable online archive.
+    digest: 9302bab2f19d01eaa79531297919abd57d8f44880e04cab4b69ee76a29511e58
+    home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+    icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
+    keywords:
+    - paperless
+    - paperless-ng
+    - paperless-ngx
+    - dms
+    - document
+    kubeVersion: '>=1.34.0-0'
+    maintainers:
+    - email: codeopsms@users.noreply.github.com
+      name: CodeOpsMS
+      url: https://github.com/CodeOpsMS
+    name: paperless-ngx
+    sources:
+    - https://github.com/CodeOpsMS/paperless-ngx-helm-chart
+    - https://github.com/paperless-ngx/paperless-ngx
+    - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
+    type: application
+    urls:
+    - https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-0.4.0.tgz
+    version: 0.4.0
+  - annotations:
+      artifacthub.io/changes: |
         - kind: changed
           description: Publish Paperless-ngx 3 as an explicitly experimental chart alongside stable chart 0.3.23
         - kind: security
@@ -45,7 +124,7 @@ entries:
       artifacthub.io/prerelease: "true"
     apiVersion: v2
     appVersion: 3.0.5
-    created: "2026-08-26T11:42:25.338459832Z"
+    created: "2026-09-12T15:44:19.495122906Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -90,7 +169,7 @@ entries:
           url: https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
     apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-26T11:42:25.330472986Z"
+    created: "2026-09-12T15:44:19.487114552Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -134,7 +213,7 @@ entries:
           url: https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
     apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-26T11:42:25.323408364Z"
+    created: "2026-09-12T15:44:19.47980455Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -170,7 +249,7 @@ entries:
     version: 0.3.22
   - apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-26T11:42:25.315877893Z"
+    created: "2026-09-12T15:44:19.472367129Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -206,7 +285,7 @@ entries:
     version: 0.3.21
   - apiVersion: v2
     appVersion: 2.20.15
-    created: "2026-08-26T11:42:25.307307368Z"
+    created: "2026-09-12T15:44:19.464976163Z"
     dependencies:
     - condition: postgresql.enabled
       name: postgresql
@@ -240,4 +319,4 @@ entries:
     urls:
     - https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-0.3.20.tgz
     version: 0.3.20
-generated: "2026-08-26T11:42:25.300441718Z"
+generated: "2026-09-12T15:44:19.456844163Z"
