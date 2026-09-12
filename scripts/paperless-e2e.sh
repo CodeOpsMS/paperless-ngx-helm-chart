@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 MODE=${1:?Usage: paperless-e2e.sh fresh|upgrade CANDIDATE_CHART}
 CANDIDATE_CHART=${2:?Usage: paperless-e2e.sh fresh|upgrade CANDIDATE_CHART}
 
@@ -30,6 +32,10 @@ PAPERLESS_ADMIN_MAIL=${PAPERLESS_ADMIN_MAIL:-e2e@example.invalid}
 RUN_ID=${RUN_ID:-}
 API_ACCEPT=application/json
 PORT_FORWARD_PID=
+PROMETHEUS_FORWARD_PID=
+MONITORING_E2E=${MONITORING_E2E:-false}
+REQUIRE_NETWORK_POLICY_ENFORCEMENT=${REQUIRE_NETWORK_POLICY_ENFORCEMENT:-false}
+E2E_STORAGE_CLASS=${E2E_STORAGE_CLASS:-}
 API_TOKEN=
 DOCUMENT_ID=
 MATCHED_DOCUMENT_ID=
@@ -90,7 +96,12 @@ common_values=(
   --set networkPolicy.enabled=true
   --set-string persistence.size=1Gi
   --set-string postgresql.primary.persistence.size=2Gi
+  --set-json 'networkPolicy.ingress.metrics=[{"podSelector":{"matchLabels":{"paperless-e2e-metrics":"allowed"}}}]'
 )
+if [[ -n "$E2E_STORAGE_CLASS" ]]; then
+  common_values+=(--set-string "persistence.storageClass=$E2E_STORAGE_CLASS"
+    --set-string "postgresql.primary.persistence.storageClass=$E2E_STORAGE_CLASS")
+fi
 
 # The immutable 0.3.23 baseline loses the root Helm context in its generated
 # dependency-egress fallback. Supplying the equivalent explicit selectors keeps
@@ -266,6 +277,11 @@ ensure_e2e_namespace() {
 }
 
 stop_port_forward() {
+  if [[ -n "${PROMETHEUS_FORWARD_PID:-}" ]]; then
+    kill "$PROMETHEUS_FORWARD_PID" >/dev/null 2>&1 || true
+    wait "$PROMETHEUS_FORWARD_PID" >/dev/null 2>&1 || true
+    PROMETHEUS_FORWARD_PID=
+  fi
   if [[ -n "${PORT_FORWARD_PID:-}" ]]; then
     kill "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
     wait "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
@@ -716,32 +732,23 @@ wait_for_search_query() {
 
 wait_for_task_queue_idle() {
   local attempt
-  local tasks
+  local idle_samples=0
+  local pod
+  pod=$(app_pod)
 
   for attempt in $(seq 1 120); do
-    tasks=$(api_request GET '/api/tasks/?page_size=100')
-    if jq -e '
-      (if type == "array" then . else (.results // []) end)
-      | map(
-          .status // ""
-          | ascii_upcase
-          | select(. == "PENDING" or . == "RECEIVED" or . == "STARTED" or . == "RETRY")
-        )
-      | length == 0
-    ' <<<"$tasks" >/dev/null; then
-      return 0
+    if kube exec -i -n "$NAMESPACE" "$pod" -- python3 - <"$SCRIPT_DIR/check-celery-idle.py"; then
+      idle_samples=$((idle_samples + 1))
+      if [[ "$idle_samples" -ge 3 ]]; then
+        echo "Broker priority queues, unacknowledged deliveries and worker tasks are idle"
+        return 0
+      fi
+    else
+      idle_samples=0
     fi
     sleep 5
   done
 
-  jq '
-    (if type == "array" then . else (.results // []) end)
-    | map(select(((.status // "") | ascii_upcase) == "PENDING"
-        or ((.status // "") | ascii_upcase) == "RECEIVED"
-        or ((.status // "") | ascii_upcase) == "STARTED"
-        or ((.status // "") | ascii_upcase) == "RETRY"))
-    | map({id,status,task_name,date_created,date_done})
-  ' <<<"$tasks" >&2
   echo "Paperless task queue did not drain before shutdown" >&2
   return 1
 }
@@ -956,6 +963,17 @@ verify_paperless3_status() {
 }
 
 install_candidate() {
+  local monitoring_values=()
+  if [[ "$MONITORING_E2E" == true ]]; then
+    monitoring_values+=(
+      --set prometheus.servicemonitor.enabled=true
+      --set-string "prometheus.servicemonitor.labels.paperless-e2e-monitor=$RUN_ID"
+      --set-string prometheus.servicemonitor.interval=5s
+      --set prometheus.rules.enabled=true
+      --set-string "prometheus.rules.labels.paperless-e2e-monitor=$RUN_ID"
+      --set-json 'prometheus.rules.additionalRules=[{"alert":"PaperlessE2EAlwaysFiring","expr":"vector(1)"}]'
+    )
+  fi
   helm_cluster "$HELM_BIN" upgrade --install "$RELEASE" "$CANDIDATE_CHART" \
     --namespace "$NAMESPACE" \
     --reset-values \
@@ -967,6 +985,7 @@ install_candidate() {
     --set strategy.rollingUpdate.maxSurge=0 \
     --set-string strategy.rollingUpdate.maxUnavailable=100% \
     --set-string env.PAPERLESS_SEARCH_LANGUAGE=de \
+    ${monitoring_values[@]+"${monitoring_values[@]}"} \
     "${common_values[@]}"
   verify_candidate_rollout_safety
 }
@@ -1021,7 +1040,15 @@ with urllib.request.urlopen(request, timeout=15) as response:
     assert "flower_" in payload, "Flower metrics missing"
 print("Explicit search language de and Flower metrics with Pod-IP Host verified")
 ' "$pod_ip"
+  verify_metrics_network_path "$pod_ip"
+  if [[ "$MONITORING_E2E" == true ]]; then
+    verify_prometheus_integration
+  fi
 }
+
+# Shared helpers are repository-only and are not shipped in the chart package.
+# shellcheck source=scripts/monitoring-e2e.sh
+source "$SCRIPT_DIR/monitoring-e2e.sh"
 
 consume_atomic_document() {
   local pod

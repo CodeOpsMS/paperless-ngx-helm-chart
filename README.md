@@ -264,7 +264,16 @@ server-side dry runs, and a required Kubernetes 1.36 installation. One candidate
 package is reused byte-for-byte by all installation and upgrade jobs. The
 Paperless update PRs, release branches, and the daily workflow additionally test fresh installs
 on Kubernetes 1.34-1.36 and upgrades from Paperless 2.20.15 and the previous
-Paperless 3.0.5 preview across Helm 3 and Helm 4.
+Paperless 3.0.5 preview across Helm 3 and Helm 4. A separate Cilium-backed Kind
+job tests real Prometheus Operator reconciliation, Flower scraping, alert-rule
+evaluation, and allowed/denied metrics network paths.
+
+Publication additionally requires both upgrades on an isolated real cluster
+using the exact main CI candidate. The release job cannot run without that
+successful dependency and matching artifact ID, SHA-256 and source commit.
+See [CLUSTER-ACCEPTANCE.md](CLUSTER-ACCEPTANCE.md) for the protected environment,
+dedicated test identity, optional VPN and setup requirements. Unconfigured or
+unreachable acceptance infrastructure blocks publication; it is never skipped.
 
 | Update | Automation policy |
 |--------|-------------------|
@@ -272,7 +281,7 @@ Paperless 3.0.5 preview across Helm 3 and Helm 4.
 | Paperless major | Requires a manually prepared migration PR |
 | PostgreSQL/Valkey charts | Renovate opens separate review PRs |
 | GitHub-owned Actions patch | A small allowlist may auto-merge after required checks; all other updates require review |
-| Releases | A successful `main` CI run promotes its exact tested candidate; stable charts become Latest and the normal Helm default |
+| Releases | Successful `main` CI plus mandatory real-cluster acceptance promotes the exact candidate; stable charts become Latest and the normal Helm default |
 
 GitHub Pages is active. The Pages healthcheck verifies Artifact Hub repository
 metadata and byte-identical SHA-256 chart packages across Pages, GitHub

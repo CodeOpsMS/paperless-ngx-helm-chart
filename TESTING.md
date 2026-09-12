@@ -4,8 +4,12 @@ The pull-request workflow uploads the exact packaged candidate as the immutable,
 attempt-specific artifact
 `paperless-ngx-candidate-<run-id>-<run-attempt>`. Kind validates that candidate
 on Kubernetes 1.34-1.36. Before releasing `0.4.0`, the same
-artifact must pass real-cluster acceptance using the `suseai` context and new,
-isolated test namespaces. This document describes required checks; it is not
+artifact must pass the protected real-cluster job against both baselines in
+new, isolated test namespaces. See [CLUSTER-ACCEPTANCE.md](CLUSTER-ACCEPTANCE.md)
+for the mandatory release dependency and one-time safe infrastructure setup.
+The examples below are private, manual rehearsals; they do not bypass acceptance
+of the exact main CI artifact by the publishing workflow.
+This document describes required checks; it is not
 evidence that the current candidate has passed them.
 
 ## Verify dependency discovery locally
@@ -136,7 +140,9 @@ file hashes, and a
 zero-surge, fully unavailable rollout with exactly one migration pod and no
 HPA. It also waits for every Deployment-owned baseline Paperless pod to be
 deleted before installing the Paperless 3 candidate.
-It drains the baseline task queue before shutdown and proves that a new
+It observes three consecutive idle snapshots of all configured Redis priority
+queues, unacknowledged deliveries and all expected workers' active/reserved/
+scheduled tasks before shutdown, failing closed on missing replies. It proves that a new
 document can be consumed after the upgrade. NetworkPolicy is enabled throughout
 the run, and the restore rehearsal compares exact row-count signatures for the
 core users, documents, and classification metadata. Database commands read the
@@ -145,9 +151,15 @@ compares password fingerprints before and after the upgrade without printing
 the credential.
 
 The candidate starts with `PAPERLESS_SEARCH_LANGUAGE=de`, exercising the
-upstream fix for explicit search-language configuration. It also serves a live
-Flower `/metrics` response, which the runner checks rather than inferring
-monitoring health from the application's web readiness probe. Remote OCR mode
+upstream fix for explicit search-language configuration. It also verifies live
+Flower metrics through both Service and Pod IP from a separate pod. With
+`MONITORING_E2E=true`, preinstalled monitoring CRDs/operator must reconcile the
+chart's ServiceMonitor and PrometheusRule into successful actual scrapes,
+stored Flower samples and a firing test alert. With
+`REQUIRE_NETWORK_POLICY_ENFORCEMENT=true`, a non-allowed probe must be blocked.
+Both flags are mandatory in the real-cluster release job and the dedicated
+Cilium-backed Kind monitoring job. The other Kind jobs retain their basic CNI;
+NetworkPolicy presence alone there is not evidence of enforcement. Remote OCR mode
 compatibility is covered by schema/render tests; this acceptance run does not
 send documents to an external OCR or AI provider.
 
