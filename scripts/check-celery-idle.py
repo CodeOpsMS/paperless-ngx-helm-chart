@@ -6,16 +6,22 @@ No broker URLs, task payloads, or credentials are printed, including on errors.
 """
 
 import json
+import signal
 import sys
 
 
 def snapshot(app, expected_workers=1):
     inspector = app.control.inspect(timeout=5)
-    replies = {name: getattr(inspector, name)() for name in
-               ("ping", "active", "reserved", "scheduled", "active_queues")}
-    workers = set(replies["ping"] or {})
+    ping = inspector.ping()
+    workers = set(ping or {})
     if len(workers) != expected_workers:
         raise ValueError("Missing or unexpected worker")
+    # Once the worker set is established, directed replies complete as soon as
+    # all expected workers answer instead of waiting out every broadcast timeout.
+    inspector.destination = sorted(workers)
+    replies = {"ping": ping}
+    replies.update({name: getattr(inspector, name)() for name in
+                    ("active", "reserved", "scheduled", "active_queues")})
     for name, response in replies.items():
         if not isinstance(response, dict) or set(response) != workers:
             raise ValueError("Incomplete worker response")
@@ -64,15 +70,22 @@ def snapshot(app, expected_workers=1):
 
 
 def main():
+    def deadline(_signum, _frame):
+        raise TimeoutError("Broker snapshot deadline exceeded")
+
+    signal.signal(signal.SIGALRM, deadline)
+    signal.alarm(45)
     try:
         from paperless.celery import app
         counts = snapshot(app)
         print(json.dumps(counts, sort_keys=True))
-        return 0 if all(count == 0 for count in counts.values()) else 1
+        return 0 if all(count == 0 for count in counts.values()) else 3
     except Exception as error:
         # Exceptions from Redis/Celery can contain credential-bearing URLs.
         print(f"Cannot establish complete broker/worker idle state ({type(error).__name__})", file=sys.stderr)
         return 2
+    finally:
+        signal.alarm(0)
 
 
 if __name__ == "__main__":

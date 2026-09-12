@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 import importlib.util
+import contextlib
+import io
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import TestCase, main
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 spec = importlib.util.spec_from_file_location("idle", Path(__file__).with_name("check-celery-idle.py"))
 idle = importlib.util.module_from_spec(spec)
@@ -78,6 +81,27 @@ class IdleTests(TestCase):
         self.channel.ack_emulation = False
         with self.assertRaises(ValueError):
             idle.snapshot(self.app)
+
+    def test_cli_distinguishes_busy_from_unavailable_and_sets_deadline(self):
+        for queued, expected in ((0, 0), (1, 3)):
+            with self.subTest(queued=queued), \
+                    patch.dict("sys.modules", {"paperless.celery": SimpleNamespace(app=self.app)}), \
+                    patch.object(idle, "snapshot", return_value={"queued": queued}), \
+                    patch.object(idle.signal, "signal"), patch.object(idle.signal, "alarm") as alarm, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(idle.main(), expected)
+                self.assertEqual([call.args[0] for call in alarm.call_args_list], [45, 0])
+
+    def test_cli_never_prints_credential_bearing_exception(self):
+        output = io.StringIO()
+        with patch.dict("sys.modules", {"paperless.celery": SimpleNamespace(app=self.app)}), \
+                patch.object(idle, "snapshot", side_effect=RuntimeError("redis://user:secret@private.invalid")), \
+                patch.object(idle.signal, "signal"), patch.object(idle.signal, "alarm"), \
+                contextlib.redirect_stderr(output):
+            self.assertEqual(idle.main(), 2)
+        self.assertNotIn("secret", output.getvalue())
+        self.assertNotIn("private.invalid", output.getvalue())
+        self.assertIn("RuntimeError", output.getvalue())
 
 
 if __name__ == "__main__":

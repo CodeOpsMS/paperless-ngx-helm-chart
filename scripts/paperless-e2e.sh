@@ -731,20 +731,33 @@ wait_for_search_query() {
 }
 
 wait_for_task_queue_idle() {
-  local attempt
   local idle_samples=0
+  local error_samples=0
+  local queue_deadline=$((SECONDS + 600))
+  local status
   local pod
   pod=$(app_pod)
 
-  for attempt in $(seq 1 120); do
+  while [[ "$SECONDS" -lt "$queue_deadline" ]]; do
     if kube exec -i -n "$NAMESPACE" "$pod" -- python3 - <"$SCRIPT_DIR/check-celery-idle.py"; then
+      error_samples=0
       idle_samples=$((idle_samples + 1))
       if [[ "$idle_samples" -ge 3 ]]; then
         echo "Broker priority queues, unacknowledged deliveries and worker tasks are idle"
         return 0
       fi
     else
+      status=$?
       idle_samples=0
+      if [[ "$status" -eq 3 ]]; then
+        error_samples=0
+      else
+        error_samples=$((error_samples + 1))
+        if [[ "$error_samples" -ge 3 ]]; then
+          echo "Broker/worker inspection failed repeatedly; refusing to infer an empty queue" >&2
+          return 1
+        fi
+      fi
     fi
     sleep 5
   done
