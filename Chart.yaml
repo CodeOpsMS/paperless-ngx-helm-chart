@@ -7,9 +7,9 @@ type: application
 kubeVersion: ">=1.34.0-0"
 icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.4.0-experimental.1"
+version: "0.4.0"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
-appVersion: "3.0.5"
+appVersion: "3.1.3"
 keywords:
   - paperless
   - paperless-ng
@@ -25,38 +25,38 @@ sources:
   - https://github.com/paperless-ngx/paperless-ngx
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 annotations:
-  artifacthub.io/prerelease: "true"
+  artifacthub.io/prerelease: "false"
   artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
-    - kind: changed
-      description: Publish Paperless-ngx 3 as an explicitly experimental chart alongside stable chart 0.3.23
-    - kind: security
-      description: Include security fixes shipped in Paperless-ngx 3.0.0 and Valkey 9.0.3, carried forward by Valkey 9.0.5
-    - kind: changed
-      description: Upgrade Paperless-ngx from 2.20.15 to 3.0.5
     - kind: added
-      description: Add strict values validation, immutable image pins, and Paperless 3 upgrade guidance
+      description: Gate publication on GitHub-hosted Kubernetes acceptance of the exact candidate and source commit; keep external rehearsals optional
+    - kind: added
+      description: Test broker priority queues and worker state, actual Prometheus scraping and enforced metrics NetworkPolicy
+    - kind: changed
+      description: Promote the validated Paperless-ngx 3.1.3 chart to stable 0.4.0; retain 0.3.23 as the explicitly pinned Paperless 2 baseline
+    - kind: changed
+      description: Upgrade Paperless-ngx from 3.0.5 to 3.1.3 including the 3.1.2 security fix GHSA-2jhj-xqrq-rmrq and 3.1.3 hardening
+    - kind: added
+      description: Test upgrades from both stable 0.3.23 and published 0.4.0-experimental.1
     - kind: fixed
-      description: Use a stable upstream icon URL and migration-safe startup probes
+      description: Restore explicit PAPERLESS_SEARCH_LANGUAGE after the upstream 3.1.0 startup fix
     - kind: fixed
-      description: Replace Secret-derived pod annotation hashes with an explicit non-sensitive rollout revision
+      description: Render valid Prometheus alert groups and disable Flower consistently when configured false
     - kind: fixed
       description: Refresh the immutable Valkey 9.0.5 manifest digest after the upstream tag was republished
     - kind: fixed
-      description: Restore supported dependency registry and OpenShift global options under strict values validation
+      description: Preserve reviewed update branches and historical migration notes in release automation
     - kind: fixed
-      description: Reject PAPERLESS_SEARCH_LANGUAGE while its explicit use prevents Paperless 3.0.5 from starting
+      description: Validate remote OCR mode and require enabled Flower for a ServiceMonitor
     - kind: changed
-      description: Use and validate a zero-surge RollingUpdate strategy compatible with Helm 4 server-side apply; the documented complete scale-to-zero procedure remains the major-version migration guard
-    - kind: fixed
-      description: Restore Secret-backed PAPERLESS_SOCIALACCOUNT_PROVIDERS without exposing OIDC credentials in values
+      description: Update migration guidance for fixed 3.0 issues, Python 3.14, remote OCR, and remaining legacy database limitations
   artifacthub.io/images: |
     - name: Paperless-ngx
-      image: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
+      image: ghcr.io/paperless-ngx/paperless-ngx@sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a
     - name: PostgreSQL
       image: docker.io/bitnamilegacy/postgresql@sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d
     - name: Valkey
-      image: docker.io/valkey/valkey:9.0.5@sha256:2437dbc85bb67005fa7db135dfbc45075b800f4afa1ab2a301e3b878b0c273e2
+      image: docker.io/valkey/valkey:9.0.5@sha256:4c64dfeae602349cd38b70ecfc631ab99624283cd975f34f96a72c6050f1b890
     - name: Helm test
       image: docker.io/library/busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
   artifacthub.io/links: |

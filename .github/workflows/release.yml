@@ -15,17 +15,61 @@ concurrency:
 
 permissions:
   actions: read
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
-  release:
+  verify-ci:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout tested main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Verify trusted CI provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_RUN_ID: ${{ github.event.workflow_run.id }}
+          TESTED_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TESTED_RUN_ID}" >"$RUNNER_TEMP/ci-source.json"
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${TESTED_RUN_ID}/jobs?filter=latest&per_page=100" \
+            >"$RUNNER_TEMP/ci-jobs.json"
+          python3 .github/scripts/verify-release-source.py "$RUNNER_TEMP/ci-source.json" \
+            "$GITHUB_REPOSITORY" "$SOURCE_SHA" "$TESTED_RUN_ID" "$TESTED_RUN_ATTEMPT" \
+            --jobs "$RUNNER_TEMP/ci-jobs.json"
+
+  github-cluster-acceptance:
+    needs: verify-ci
+    uses: ./.github/workflows/cluster-acceptance.yml
+    with:
+      source_sha: ${{ github.event.workflow_run.head_sha }}
+      tested_run_id: ${{ format('{0}', github.event.workflow_run.id) }}
+      tested_run_attempt: ${{ format('{0}', github.event.workflow_run.run_attempt) }}
+
+  release:
+    needs: github-cluster-acceptance
+    if: >-
+      needs.github-cluster-acceptance.result == 'success' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout
@@ -45,20 +89,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Resolve tested candidate from Helm CI
-        id: candidate-artifact
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TESTED_RUN_ID: ${{ github.event.workflow_run.id }}
-          TESTED_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-        run: >-
-          .github/scripts/resolve-candidate-artifact.sh
-          "$TESTED_RUN_ID" "$TESTED_RUN_ATTEMPT"
-
       - name: Download tested candidate from Helm CI
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          artifact-ids: ${{ steps.candidate-artifact.outputs.id }}
+          artifact-ids: ${{ needs.github-cluster-acceptance.outputs.artifact_id }}
           path: .release-packages
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -68,6 +102,10 @@ jobs:
 
       - name: Validate immutable candidate
         id: chart
+        env:
+          ACCEPTED_SHA256: ${{ needs.github-cluster-acceptance.outputs.sha256 }}
+          ACCEPTED_SOURCE_SHA: ${{ needs.github-cluster-acceptance.outputs.source_sha }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           packages=(.release-packages/paperless-ngx-*.tgz)
@@ -98,6 +136,9 @@ jobs:
           bash .github/scripts/check-chart-package.sh "$package"
           bash .github/scripts/check-chart-icon.sh "$package"
           package_sha=$(sha256sum "$package" | awk '{ print $1 }')
+          [[ "$ACCEPTED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$package_sha" = "$ACCEPTED_SHA256"
+          test "$SOURCE_SHA" = "$ACCEPTED_SOURCE_SHA"
           echo "Promoting tested candidate SHA-256: ${package_sha}"
 
           {
@@ -143,7 +184,7 @@ jobs:
             release_flags=()
             if [[ "$CHART_PRERELEASE" == "true" ]]; then
               release_title="[EXPERIMENTAL] ${tag}"
-              release_notes="EXPERIMENTAL Paperless-ngx 3 Helm chart ${CHART_VERSION}. Stable chart 0.3.23 remains the default. Read UPGRADE-0.4.md before testing an upgrade."
+              release_notes="EXPERIMENTAL Paperless-ngx 3 Helm chart ${CHART_VERSION}. The latest stable chart remains the default. Read UPGRADE-0.4.md before testing an upgrade."
               release_flags+=(--prerelease --latest=false)
             fi
             gh release create "$tag" \
@@ -548,9 +589,9 @@ jobs:
               exit 1
             fi
             if [[ "$CHART_PRERELEASE" == "true" ]]; then
-              gh release edit "$tag" --draft=false --prerelease
+              gh release edit "$tag" --draft=false --prerelease --latest=false
             else
-              gh release edit "$tag" --draft=false
+              gh release edit "$tag" --draft=false --prerelease=false --latest
             fi
             git fetch --tags --force
             tag_commit=$(git rev-parse "${tag}^{commit}")
@@ -572,6 +613,15 @@ jobs:
           fi
           if [[ "$(jq -r '.isPrerelease' <<<"$final_metadata")" != "$CHART_PRERELEASE" ]]; then
             echo "::error::Published GitHub release has the wrong prerelease status"
+            exit 1
+          fi
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          if [[ "$CHART_PRERELEASE" == "false" && "$latest_tag" != "$tag" ]]; then
+            echo "::error::Stable release ${tag} did not become GitHub Latest (${latest_tag})"
+            exit 1
+          fi
+          if [[ "$CHART_PRERELEASE" == "true" && "$latest_tag" == "$tag" ]]; then
+            echo "::error::A prerelease must not become GitHub Latest"
             exit 1
           fi
           echo "Published immutable GitHub release ${tag}: ${expected_sha}"

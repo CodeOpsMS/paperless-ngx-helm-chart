@@ -414,7 +414,6 @@
             "PAPERLESS_CONSUMER_POLLING_DELAY",
             "PAPERLESS_CONSUMER_POLLING_RETRY_COUNT",
             "PAPERLESS_CONSUMER_BARCODE_SCANNER",
-            "PAPERLESS_SEARCH_LANGUAGE",
             "PAPERLESS_DBSSLMODE",
             "PAPERLESS_DBSSLROOTCERT",
             "PAPERLESS_DBSSLCERT",
@@ -426,6 +425,13 @@
         }
       },
       "properties": {
+        "PAPERLESS_ENABLE_FLOWER": {
+          "type": "boolean"
+        },
+        "PAPERLESS_REMOTE_OCR_MODE": {
+          "type": "string",
+          "enum": ["always", "workflow_only"]
+        },
         "PAPERLESS_OCR_MODE": {
           "type": "string",
           "enum": ["auto", "force", "redo", "off"]
@@ -693,6 +699,31 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "prometheus": {
+            "properties": {
+              "servicemonitor": {
+                "properties": { "enabled": { "const": true } },
+                "required": ["enabled"]
+              }
+            },
+            "required": ["servicemonitor"]
+          }
+        },
+        "required": ["prometheus"]
+      },
+      "then": {
+        "properties": {
+          "env": {
+            "properties": { "PAPERLESS_ENABLE_FLOWER": { "const": true } },
+            "required": ["PAPERLESS_ENABLE_FLOWER"]
+          }
+        },
+        "required": ["env"]
+      }
+    },
     {
       "not": {
         "properties": {

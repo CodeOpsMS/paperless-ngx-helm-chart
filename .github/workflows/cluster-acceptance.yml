@@ -1,0 +1,86 @@
+name: Disposable Kubernetes acceptance
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      tested_run_id:
+        required: true
+        type: string
+      tested_run_attempt:
+        required: true
+        type: string
+    outputs:
+      artifact_id:
+        value: ${{ jobs.kind-acceptance.outputs.artifact_id }}
+      sha256:
+        value: ${{ jobs.kind-acceptance.outputs.sha256 }}
+      source_sha:
+        value: ${{ jobs.kind-acceptance.outputs.source_sha }}
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  kind-acceptance:
+    name: Kind / both upgrade baselines and monitoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      artifact_id: ${{ steps.candidate-artifact.outputs.id }}
+      sha256: ${{ steps.acceptance.outputs.sha256 }}
+      source_sha: ${{ steps.acceptance.outputs.source_sha }}
+    steps:
+      - name: Checkout candidate source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+        with:
+          # renovate: datasource=github-releases depName=helm-v4 packageName=helm/helm versioning=semver
+          version: v4.2.3
+
+      - name: Resolve exact tested candidate
+        id: candidate-artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESTED_RUN_ID: ${{ inputs.tested_run_id }}
+          TESTED_RUN_ATTEMPT: ${{ inputs.tested_run_attempt }}
+        run: .github/scripts/resolve-candidate-artifact.sh "$TESTED_RUN_ID" "$TESTED_RUN_ATTEMPT"
+
+      - name: Download exact tested candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.candidate-artifact.outputs.id }}
+          path: .acceptance-candidate
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.tested_run_id }}
+
+      - name: Create disposable Kubernetes cluster without kindnet
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          version: v0.32.0
+          node_image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+          config: .github/kind-monitoring.yaml
+          wait: 0s
+
+      - name: Install policy-enforcing CNI and real monitoring CRDs/operator
+        run: bash .github/scripts/install-monitoring-test-stack.sh
+
+      - name: Test both baselines with monitoring and enforced NetworkPolicy
+        id: acceptance
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          packages=(.acceptance-candidate/paperless-ngx-*.tgz)
+          test "${#packages[@]}" -eq 1
+          test -s "${packages[0]}"
+          bash .github/scripts/check-chart-package.sh "${packages[0]}"
+          bash .github/scripts/run-kind-acceptance.sh "${packages[0]}"

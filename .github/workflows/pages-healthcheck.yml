@@ -88,8 +88,8 @@ jobs:
               echo "::error::Prerelease chart ${source_version} lacks the Artifact Hub prerelease annotation"
               exit 1
             fi
-            if [[ "$published_version" != "$baseline_version" || "$latest_version" != "$baseline_version" ]]; then
-              echo "::error::Stable default must remain ${baseline_version} during the experimental release"
+            if [[ "$published_version" == *-* || "$(jq -r '.prerelease' <<< "$release_json")" != "false" ]]; then
+              echo "::error::An experimental release must not replace the latest stable default"
               exit 1
             fi
             if [[ "$development_version" != "$source_version" ]]; then
