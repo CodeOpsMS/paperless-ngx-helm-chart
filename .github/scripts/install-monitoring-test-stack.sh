@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Cluster-scoped bootstrap ONLY for the disposable Kind monitoring CI job.
-# Never run this against an existing cluster; real acceptance requires an
+# Cluster-scoped bootstrap ONLY for the disposable Kind CI/acceptance jobs.
+# Never run this against an existing cluster; external acceptance requires an
 # independently provisioned operator and policy-enforcing CNI.
 set -euo pipefail
-[[ "${CI:-}" == true && "${GITHUB_JOB:-}" == monitoring-integration ]]
+[[ "${CI:-}" == true ]]
+[[ "${GITHUB_JOB:-}" == monitoring-integration || "${GITHUB_JOB:-}" == kind-acceptance ]]
 test "$(kubectl config current-context)" = kind-chart-testing
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT

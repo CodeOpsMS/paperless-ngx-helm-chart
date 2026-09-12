@@ -29,7 +29,7 @@ annotations:
   artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
     - kind: added
-      description: Gate publication on real-cluster acceptance of the exact candidate and source commit
+      description: Gate publication on GitHub-hosted Kubernetes acceptance of the exact candidate and source commit; keep external rehearsals optional
     - kind: added
       description: Test broker priority queues and worker state, actual Prometheus scraping and enforced metrics NetworkPolicy
     - kind: changed

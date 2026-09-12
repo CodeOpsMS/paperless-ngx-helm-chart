@@ -18,19 +18,14 @@ permissions:
   contents: read
 
 jobs:
-  real-cluster-acceptance:
+  verify-ci:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    environment: paperless-release-acceptance
-    outputs:
-      artifact_id: ${{ steps.candidate-artifact.outputs.id }}
-      sha256: ${{ steps.acceptance.outputs.sha256 }}
-      source_sha: ${{ steps.acceptance.outputs.source_sha }}
+    timeout-minutes: 10
     steps:
       - name: Checkout tested main commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -45,90 +40,27 @@ jobs:
           TESTED_RUN_ID: ${{ github.event.workflow_run.id }}
           TESTED_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
         run: |
+          set -euo pipefail
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TESTED_RUN_ID}" >"$RUNNER_TEMP/ci-source.json"
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${TESTED_RUN_ID}/jobs?filter=latest&per_page=100" \
+            >"$RUNNER_TEMP/ci-jobs.json"
           python3 .github/scripts/verify-release-source.py "$RUNNER_TEMP/ci-source.json" \
-            "$GITHUB_REPOSITORY" "$SOURCE_SHA" "$TESTED_RUN_ID" "$TESTED_RUN_ATTEMPT"
+            "$GITHUB_REPOSITORY" "$SOURCE_SHA" "$TESTED_RUN_ID" "$TESTED_RUN_ATTEMPT" \
+            --jobs "$RUNNER_TEMP/ci-jobs.json"
 
-      - name: Set up Helm
-        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
-        with:
-          # renovate: datasource=github-releases depName=helm-v4 packageName=helm/helm versioning=semver
-          version: v4.2.3
-
-      - name: Resolve exact tested candidate
-        id: candidate-artifact
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TESTED_RUN_ID: ${{ github.event.workflow_run.id }}
-          TESTED_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-        run: .github/scripts/resolve-candidate-artifact.sh "$TESTED_RUN_ID" "$TESTED_RUN_ATTEMPT"
-
-      - name: Download exact tested candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ steps.candidate-artifact.outputs.id }}
-          path: .release-packages
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-
-      - name: Configure isolated cluster access
-        env:
-          ACCEPTANCE_ENABLED: ${{ vars.ACCEPTANCE_ENABLED }}
-          ACCEPTANCE_KUBECONFIG_B64: ${{ secrets.ACCEPTANCE_KUBECONFIG_B64 }}
-          ACCEPTANCE_WIREGUARD_CONFIG: ${{ secrets.ACCEPTANCE_WIREGUARD_CONFIG }}
-          KUBECTL_VERSION: ${{ vars.ACCEPTANCE_KUBECTL_VERSION || 'v1.34.6' }}
-        run: |
-          set -euo pipefail
-          umask 077
-          test "$ACCEPTANCE_ENABLED" = true
-          test -n "$ACCEPTANCE_KUBECONFIG_B64"
-          [[ "$KUBECTL_VERSION" =~ ^v1\.[0-9]+\.[0-9]+$ ]]
-          curl -fsSL --retry 3 "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "$RUNNER_TEMP/kubectl"
-          expected=$(curl -fsSL --retry 3 "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256")
-          test "$(sha256sum "$RUNNER_TEMP/kubectl" | awk '{print $1}')" = "$expected"
-          chmod +x "$RUNNER_TEMP/kubectl"
-          echo "$RUNNER_TEMP" >>"$GITHUB_PATH"
-          printf '%s' "$ACCEPTANCE_KUBECONFIG_B64" | base64 --decode >"$RUNNER_TEMP/acceptance.kubeconfig"
-          if [[ -n "$ACCEPTANCE_WIREGUARD_CONFIG" ]]; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq wireguard-tools openresolv
-            printf '%s' "$ACCEPTANCE_WIREGUARD_CONFIG" >"$RUNNER_TEMP/acceptance-wg.conf"
-            # The redirection intentionally creates a runner-owned private log.
-            # shellcheck disable=SC2024
-            sudo wg-quick up "$RUNNER_TEMP/acceptance-wg.conf" >"$RUNNER_TEMP/wg-private.log" 2>&1
-          fi
-
-      - name: Test both baselines on the isolated real cluster
-        id: acceptance
-        env:
-          KUBECONFIG: ${{ runner.temp }}/acceptance.kubeconfig
-          ACCEPTANCE_ENABLED: ${{ vars.ACCEPTANCE_ENABLED }}
-          KUBE_CONTEXT: ${{ secrets.ACCEPTANCE_KUBE_CONTEXT }}
-          EXPECTED_KUBE_SERVER: ${{ secrets.ACCEPTANCE_KUBE_SERVER }}
-          E2E_STORAGE_CLASS: ${{ vars.ACCEPTANCE_STORAGE_CLASS }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          packages=(.release-packages/paperless-ngx-*.tgz)
-          test "${#packages[@]}" -eq 1
-          test -s "${packages[0]}"
-          bash .github/scripts/check-chart-package.sh "${packages[0]}"
-          bash .github/scripts/run-real-cluster-acceptance.sh "${packages[0]}"
-
-      - name: Remove temporary network access and credentials
-        if: always()
-        run: |
-          set -euo pipefail
-          if [[ -f "$RUNNER_TEMP/acceptance-wg.conf" ]]; then
-            # No private network diagnostics in public Actions logs.
-            sudo wg-quick down "$RUNNER_TEMP/acceptance-wg.conf" >/dev/null 2>&1 || true
-          fi
-          rm -f "$RUNNER_TEMP/acceptance.kubeconfig" "$RUNNER_TEMP/acceptance-wg.conf" "$RUNNER_TEMP/wg-private.log"
+  github-cluster-acceptance:
+    needs: verify-ci
+    uses: ./.github/workflows/cluster-acceptance.yml
+    with:
+      source_sha: ${{ github.event.workflow_run.head_sha }}
+      tested_run_id: ${{ format('{0}', github.event.workflow_run.id) }}
+      tested_run_attempt: ${{ format('{0}', github.event.workflow_run.run_attempt) }}
 
   release:
-    needs: real-cluster-acceptance
+    needs: github-cluster-acceptance
     if: >-
-      needs.real-cluster-acceptance.result == 'success' &&
+      needs.github-cluster-acceptance.result == 'success' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
@@ -160,7 +92,7 @@ jobs:
       - name: Download tested candidate from Helm CI
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          artifact-ids: ${{ needs.real-cluster-acceptance.outputs.artifact_id }}
+          artifact-ids: ${{ needs.github-cluster-acceptance.outputs.artifact_id }}
           path: .release-packages
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -171,8 +103,8 @@ jobs:
       - name: Validate immutable candidate
         id: chart
         env:
-          ACCEPTED_SHA256: ${{ needs.real-cluster-acceptance.outputs.sha256 }}
-          ACCEPTED_SOURCE_SHA: ${{ needs.real-cluster-acceptance.outputs.source_sha }}
+          ACCEPTED_SHA256: ${{ needs.github-cluster-acceptance.outputs.sha256 }}
+          ACCEPTED_SOURCE_SHA: ${{ needs.github-cluster-acceptance.outputs.source_sha }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail

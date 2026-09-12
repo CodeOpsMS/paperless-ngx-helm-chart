@@ -3,12 +3,13 @@
 The pull-request workflow uploads the exact packaged candidate as the immutable,
 attempt-specific artifact
 `paperless-ngx-candidate-<run-id>-<run-attempt>`. Kind validates that candidate
-on Kubernetes 1.34-1.36. Before releasing `0.4.0`, the same
-artifact must pass the protected real-cluster job against both baselines in
-new, isolated test namespaces. See [CLUSTER-ACCEPTANCE.md](CLUSTER-ACCEPTANCE.md)
-for the mandatory release dependency and one-time safe infrastructure setup.
-The examples below are private, manual rehearsals; they do not bypass acceptance
-of the exact main CI artifact by the publishing workflow.
+on Kubernetes 1.34-1.36. Before publication, the same main CI
+artifact must pass both upgrades with monitoring and enforced NetworkPolicy in
+a new GitHub-hosted Kind cluster. See [CLUSTER-ACCEPTANCE.md](CLUSTER-ACCEPTANCE.md)
+for the mandatory, fully GitHub-hosted release dependency. No external cluster
+credentials or VPN are required for chart publication.
+The examples below are optional private, manual rehearsals of external-cluster
+behavior; they neither replace nor bypass the mandatory GitHub acceptance.
 This document describes required checks; it is not
 evidence that the current candidate has passed them.
 
@@ -157,8 +158,9 @@ Flower metrics through both Service and Pod IP from a separate pod. With
 chart's ServiceMonitor and PrometheusRule into successful actual scrapes,
 stored Flower samples and a firing test alert. With
 `REQUIRE_NETWORK_POLICY_ENFORCEMENT=true`, a non-allowed probe must be blocked.
-Both flags are mandatory in the real-cluster release job and the dedicated
-Cilium-backed Kind monitoring job. The other Kind jobs retain their basic CNI;
+Both flags are mandatory in the shared GitHub Kind acceptance job, the optional
+external-cluster wrapper and the dedicated Cilium-backed monitoring job.
+The other Kind jobs retain their basic CNI;
 NetworkPolicy presence alone there is not evidence of enforcement. Remote OCR mode
 compatibility is covered by schema/render tests; this acceptance run does not
 send documents to an external OCR or AI provider.
@@ -259,9 +261,10 @@ production resource inventories, or complete Helm values:
 - confirmation that only synthetic data was used.
 
 If credentials, cluster access, or any test fails, record the failed preflight
-or check and the remaining acceptance gap. A local render, an older candidate's
-success, or a green Kind job does not establish a real-cluster result for this
-candidate and both baselines.
+or check and the remaining external-cluster rehearsal gap. A local render, an
+older candidate's success, or a green Kind job does not establish a result on
+the external target for this candidate and both baselines. This optional
+site-specific rehearsal is separate from the GitHub-hosted chart release gate.
 
 After evidence is captured, remove the namespace:
 

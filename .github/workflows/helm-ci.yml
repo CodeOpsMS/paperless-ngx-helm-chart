@@ -584,6 +584,20 @@ jobs:
           test "${#packages[@]}" -eq 1
           scripts/paperless-e2e.sh fresh "${packages[0]}"
 
+  release-acceptance:
+    name: GitHub Kubernetes acceptance
+    if: >-
+      github.event_name != 'pull_request' ||
+      startsWith(github.head_ref, 'chore/update-paperless-ngx-') ||
+      startsWith(github.head_ref, 'release/') ||
+      startsWith(github.head_ref, 'codex/release-')
+    needs: candidate
+    uses: ./.github/workflows/cluster-acceptance.yml
+    with:
+      source_sha: ${{ github.sha }}
+      tested_run_id: ${{ format('{0}', github.run_id) }}
+      tested_run_attempt: ${{ format('{0}', github.run_attempt) }}
+
   full-fresh-matrix:
     name: Full install / Helm ${{ matrix.helm-version }} / Kubernetes ${{ matrix.kubernetes }}
     if: >-

@@ -268,12 +268,14 @@ Paperless 3.0.5 preview across Helm 3 and Helm 4. A separate Cilium-backed Kind
 job tests real Prometheus Operator reconciliation, Flower scraping, alert-rule
 evaluation, and allowed/denied metrics network paths.
 
-Publication additionally requires both upgrades on an isolated real cluster
-using the exact main CI candidate. The release job cannot run without that
-successful dependency and matching artifact ID, SHA-256 and source commit.
-See [CLUSTER-ACCEPTANCE.md](CLUSTER-ACCEPTANCE.md) for the protected environment,
-dedicated test identity, optional VPN and setup requirements. Unconfigured or
-unreachable acceptance infrastructure blocks publication; it is never skipped.
+Publication additionally requires both upgrades with monitoring and enforced
+NetworkPolicy in a disposable GitHub-hosted Kind cluster, using the exact main
+CI candidate. The shared acceptance workflow is also exercised in release-branch
+CI. The release job requires every expected CI test to succeed, successful Kind
+acceptance, and matching artifact ID, SHA-256 and source commit. No external
+cluster, Rancher credentials or VPN is required. External-cluster rehearsals
+remain optional for site-specific integrations; they do not replace this gate.
+See [CLUSTER-ACCEPTANCE.md](CLUSTER-ACCEPTANCE.md) for coverage and limitations.
 
 | Update | Automation policy |
 |--------|-------------------|
@@ -281,7 +283,7 @@ unreachable acceptance infrastructure blocks publication; it is never skipped.
 | Paperless major | Requires a manually prepared migration PR |
 | PostgreSQL/Valkey charts | Renovate opens separate review PRs |
 | GitHub-owned Actions patch | A small allowlist may auto-merge after required checks; all other updates require review |
-| Releases | Successful `main` CI plus mandatory real-cluster acceptance promotes the exact candidate; stable charts become Latest and the normal Helm default |
+| Releases | Successful full `main` CI plus mandatory GitHub-hosted Kind acceptance promotes the exact candidate; stable charts become Latest and the normal Helm default |
 
 GitHub Pages is active. The Pages healthcheck verifies Artifact Hub repository
 metadata and byte-identical SHA-256 chart packages across Pages, GitHub
