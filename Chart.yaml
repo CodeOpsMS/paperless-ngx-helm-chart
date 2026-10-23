@@ -34,6 +34,8 @@ annotations:
       description: Document and test the new classifier, regex timeout, barcode storage, scratch directory and Secret-backed AI settings
     - kind: added
       description: Validate upgrades from stable chart 0.4.0 in addition to the Paperless 2 baseline and Paperless 3 preview
+    - kind: fixed
+      description: Refresh the immutable BusyBox 1.38.0 multi-platform digest used by Helm and monitoring tests
   artifacthub.io/images: |
     - name: Paperless-ngx
       image: ghcr.io/paperless-ngx/paperless-ngx@sha256:9bc6e8248891bcfa6f52fffe8b81e4ea8cae75790c3ec1b9906961a7ba55c969
@@ -42,7 +44,7 @@ annotations:
     - name: Valkey
       image: docker.io/valkey/valkey:9.0.5@sha256:4c64dfeae602349cd38b70ecfc631ab99624283cd975f34f96a72c6050f1b890
     - name: Helm test
-      image: docker.io/library/busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+      image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
   artifacthub.io/links: |
     - name: Chart source
       url: https://github.com/CodeOpsMS/paperless-ngx-helm-chart

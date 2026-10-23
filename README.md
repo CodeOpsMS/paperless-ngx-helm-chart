@@ -463,7 +463,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | strategy.type | string | `"RollingUpdate"` | Deployment strategy. Zero surge avoids creating an extra application pod. RollingUpdate is the only supported type because Helm 4 server-side apply cannot safely clear the old rollingUpdate field during a live switch to Recreate. The disruptive defaults cause downtime on every rollout. The Paperless 3 upgrade still requires the documented complete scale-to-zero and wait procedure. |
 | terminationGracePeriodSeconds | int | `60` | Grace period for Paperless workers to stop cleanly. |
 | tests.enabled | bool | `true` | Enable the Helm connectivity test pod. |
-| tests.image.digest | string | `"sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616"` |  |
+| tests.image.digest | string | `"sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e"` |  |
 | tests.image.pullPolicy | string | `"IfNotPresent"` |  |
 | tests.image.repository | string | `"busybox"` |  |
 | tests.image.tag | string | `"1.38.0"` |  |
