@@ -26,9 +26,9 @@ permissions:
 
 jobs:
   kind-acceptance:
-    name: Kind / both upgrade baselines and monitoring
+    name: Kind / all three upgrade baselines and monitoring
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     outputs:
       artifact_id: ${{ steps.candidate-artifact.outputs.id }}
       sha256: ${{ steps.acceptance.outputs.sha256 }}
@@ -73,7 +73,7 @@ jobs:
       - name: Install policy-enforcing CNI and real monitoring CRDs/operator
         run: bash .github/scripts/install-monitoring-test-stack.sh
 
-      - name: Test both baselines with monitoring and enforced NetworkPolicy
+      - name: Test all three baselines with monitoring and enforced NetworkPolicy
         id: acceptance
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}

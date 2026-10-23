@@ -12,11 +12,11 @@ and its cluster are disposable. No production cluster is contacted.
 ## Mandatory checks and immutable release binding
 
 1. Helm CI validates both Helm lines, seven installations on Kubernetes
-   1.34-1.36, four upgrade combinations, and a Cilium-backed monitoring test.
+   1.34-1.36, five upgrade combinations, and a Cilium-backed monitoring test.
    Every job consumes the immutable candidate archive from that CI run.
 2. Release branches, Paperless update PRs, main, scheduled and manually
    dispatched CI also exercise the reusable `cluster-acceptance.yml` workflow.
-   It runs both historical upgrades with monitoring and enforced NetworkPolicy
+   It runs all three baseline upgrades with monitoring and enforced NetworkPolicy
    together, in fresh namespaces on a disposable Kubernetes 1.36 cluster.
 3. The publishing workflow accepts only successful **main push** CI from this
    repository. It verifies run ID, attempt, source SHA and workflow path, then
@@ -27,14 +27,15 @@ and its cluster are disposable. No production cluster is contacted.
    the exact main CI artifact. It installs checksum-pinned Cilium and Prometheus
    Operator in its newly created Kind cluster, then tests upgrades from chart
    `0.3.23` / Paperless `2.20.15` and chart `0.4.0-experimental.1` / Paperless
-   `3.0.5`. Historical packages are downloaded unchanged and checksum-verified.
-5. Only after both upgrades, monitoring checks and namespace cleanup succeed
+   `3.0.5`, plus stable chart `0.4.0` / Paperless `3.1.3`. Baseline packages
+   are downloaded unchanged and checksum-verified.
+5. Only after all three upgrades, monitoring checks and namespace cleanup succeed
    does acceptance emit the candidate SHA-256 and source SHA. Publication
    downloads that **same artifact ID**, independently checks the package hash,
    source identity and chart metadata, and never rebuilds the chart. Failed
    acceptance has no success outputs and cannot unblock the publishing job.
 
-The additional acceptance job has a 90-minute ceiling and uses sequential
+The additional acceptance job has a 120-minute ceiling and uses sequential
 upgrades to bound resource usage. It shares its implementation between CI and
 release, so it is tested before merge. Re-running a failed release repeats this
 acceptance; a previous chart version's acceptance is never reused. The artifact
@@ -50,7 +51,7 @@ requirement on this mandatory path.
 
 ## What the cluster tests prove
 
-- Both historical upgrades preserve synthetic documents, metadata, PVC
+- All three baseline upgrades preserve synthetic documents, metadata, PVC
   identities, mounted-file contents and database credentials. The tests exercise
   logical database restore, search-query migration and ingestion after upgrade.
 - The queue check reads **all configured priority buckets**, unacknowledged
@@ -65,7 +66,7 @@ requirement on this mandatory path.
 
 The ordinary install/upgrade matrix retains Kind's basic CNI; NetworkPolicy
 presence alone there does not prove enforcement. The dedicated monitoring job
-and both upgrades in the shared acceptance job enforce it using Cilium.
+and all three upgrades in the shared acceptance job enforce it using Cilium.
 
 ## Optional external-cluster rehearsal
 
@@ -91,7 +92,7 @@ to the downloaded candidate's source/run, and `GITHUB_OUTPUT` to a private local
 evidence file. Detailed external cluster logs are withheld from stdout and
 discarded; reproduce individual E2E commands privately for troubleshooting.
 
-The wrapper requires both baseline upgrades, monitoring, network enforcement
+The wrapper requires all three baseline upgrades, monitoring, network enforcement
 and namespace cleanup. Missing credentials, invalid TLS, target-marker mismatch
 or failed tests remain failures of this optional rehearsal, never successes.
 Keep this identity out of production. Apply quotas, namespace admission rules

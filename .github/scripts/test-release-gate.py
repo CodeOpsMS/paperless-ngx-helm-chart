@@ -131,7 +131,7 @@ class GateTests(unittest.TestCase):
 
     def test_kind_wrapper_fails_closed(self):
         wrapper = Path(__file__).with_name("run-kind-acceptance.sh").resolve()
-        for failure in ("", "context", "ci", "job", "download", "baseline", "v2", "v3", "cleanup", "tamper"):
+        for failure in ("", "context", "ci", "job", "download", "baseline", "v2", "v3", "stable", "cleanup", "tamper"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "bin").mkdir()
@@ -152,8 +152,10 @@ elif [[ "$FAILURE" == baseline ]]; then
   printf '%064d\n' 2
 elif grep -q 0.3.23 "$1"; then
   echo 6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
-else
+elif grep -q 0.4.0-experimental.1 "$1"; then
   echo fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df
+else
+  echo 9302bab2f19d01eaa79531297919abd57d8f44880e04cab4b69ee76a29511e58
 fi
 ''',
                 }
@@ -173,6 +175,7 @@ test "$REQUIRE_NETWORK_POLICY_ENFORCEMENT" = true
 printf '%s\n' "$BASE_CHART_VERSION" >> "$TEST_CALLS"
 if [[ "$FAILURE:$BASE_CHART_VERSION" == v2:0.3.23 ]]; then exit 22; fi
 if [[ "$FAILURE:$BASE_CHART_VERSION" == v3:0.4.0-experimental.1 ]]; then exit 23; fi
+if [[ "$FAILURE:$BASE_CHART_VERSION" == stable:0.4.0 ]]; then exit 25; fi
 if [[ "$FAILURE" == cleanup ]]; then exit 24; fi
 if [[ "$FAILURE" == tamper ]]; then echo tampered > "$2"; fi
 ''')
@@ -198,11 +201,11 @@ if [[ "$FAILURE" == tamper ]]; then echo tampered > "$2"; fi
                 else:
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(output.read_text(), f"sha256={'0' * 64}\nsource_sha={self.sha}\n")
-                    self.assertEqual(calls.read_text().splitlines(), ["0.3.23", "0.4.0-experimental.1"])
+                    self.assertEqual(calls.read_text().splitlines(), ["0.3.23", "0.4.0-experimental.1", "0.4.0"])
 
     def test_real_cluster_wrapper_fails_closed_and_hides_private_logs(self):
         wrapper = Path(__file__).with_name("run-real-cluster-acceptance.sh").resolve()
-        for failure in ("", "dns", "tls", "marker", "storage", "crd", "v2", "v3"):
+        for failure in ("", "dns", "tls", "marker", "storage", "crd", "v2", "v3", "stable"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "bin").mkdir()
@@ -234,8 +237,10 @@ if [[ "$1" == *candidate.tgz ]]; then
   printf '%s  candidate\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 elif grep -q 0.3.23 "$1"; then
   printf '%s  baseline\n' 6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22
-else
+elif grep -q 0.4.0-experimental.1 "$1"; then
   printf '%s  baseline\n' fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df
+else
+  echo 9302bab2f19d01eaa79531297919abd57d8f44880e04cab4b69ee76a29511e58
 fi
 ''',
                 }
@@ -254,6 +259,7 @@ printf '%s\n' "$BASE_CHART_VERSION" >> "$TEST_CALLS"
 echo PRIVATE_CLUSTER_DIAGNOSTIC
 if [[ "$FAILURE:$BASE_CHART_VERSION" == v2:0.3.23 ]]; then exit 22; fi
 if [[ "$FAILURE:$BASE_CHART_VERSION" == v3:0.4.0-experimental.1 ]]; then exit 23; fi
+if [[ "$FAILURE:$BASE_CHART_VERSION" == stable:0.4.0 ]]; then exit 25; fi
 ''')
                 runner.chmod(0o700)
                 candidate = root / "candidate.tgz"
@@ -276,7 +282,7 @@ if [[ "$FAILURE:$BASE_CHART_VERSION" == v3:0.4.0-experimental.1 ]]; then exit 23
                 else:
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn("sha256=" + "a" * 64, output.read_text())
-                    self.assertEqual(calls.read_text().splitlines(), ["0.3.23", "0.4.0-experimental.1"])
+                    self.assertEqual(calls.read_text().splitlines(), ["0.3.23", "0.4.0-experimental.1", "0.4.0"])
 
 
 if __name__ == "__main__":

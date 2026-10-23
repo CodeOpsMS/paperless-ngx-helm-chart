@@ -40,7 +40,7 @@ image:
   # -- image tag - Overrides the image tag whose default is the chart appVersion.
   tag: ""
   # -- Immutable multi-platform image digest. When set, it overrides the tag.
-  digest: "sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a"
+  digest: "sha256:9bc6e8248891bcfa6f52fffe8b81e4ea8cae75790c3ec1b9906961a7ba55c969"
 
 
 serviceAccount:
@@ -157,6 +157,18 @@ env:
   # -- start service for monitor background jobs e.g. for prometheus (example value for env)
   # Use a YAML boolean. False disables the process and metrics ports together.
   PAPERLESS_ENABLE_FLOWER: true
+  # Optional Paperless 3.2/3.3 settings. Omit them to retain upstream defaults.
+  # PAPERLESS_CLASSIFIER_MATCH_THRESHOLD: 0.3
+  # PAPERLESS_MATCH_REGEX_TIMEOUT_SECONDS: 0.1
+  # PAPERLESS_CONSUMER_STORE_BARCODE_VALUES: false
+  # PAPERLESS_SCRATCH_DIR: /tmp/paperless
+  # JSON settings must be strings, not YAML objects.
+  # PAPERLESS_AI_LLM_EXTRA_PARAMS: '{"temperature": 0.2}'
+  # PAPERLESS_AI_LLM_EMBEDDING_API_KEY:
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: paperless-ai
+  #       key: embedding-api-key
   # -- Example using a Kubernetes EnvVar source.
   # PAPERLESS_TEST:
   #   valueFrom:

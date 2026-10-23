@@ -7,9 +7,9 @@ type: application
 kubeVersion: ">=1.34.0-0"
 icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.4.0"
+version: "0.4.1"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
-appVersion: "3.1.3"
+appVersion: "3.3.4"
 keywords:
   - paperless
   - paperless-ng
@@ -28,31 +28,15 @@ annotations:
   artifacthub.io/prerelease: "false"
   artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/changes: |
-    - kind: added
-      description: Gate publication on GitHub-hosted Kubernetes acceptance of the exact candidate and source commit; keep external rehearsals optional
-    - kind: added
-      description: Test broker priority queues and worker state, actual Prometheus scraping and enforced metrics NetworkPolicy
     - kind: changed
-      description: Promote the validated Paperless-ngx 3.1.3 chart to stable 0.4.0; retain 0.3.23 as the explicitly pinned Paperless 2 baseline
-    - kind: changed
-      description: Upgrade Paperless-ngx from 3.0.5 to 3.1.3 including the 3.1.2 security fix GHSA-2jhj-xqrq-rmrq and 3.1.3 hardening
+      description: Upgrade Paperless-ngx from 3.1.3 to 3.3.4 with the eMudhra/emSign certificate incident response and Pillow/aiohttp security updates
     - kind: added
-      description: Test upgrades from both stable 0.3.23 and published 0.4.0-experimental.1
-    - kind: fixed
-      description: Restore explicit PAPERLESS_SEARCH_LANGUAGE after the upstream 3.1.0 startup fix
-    - kind: fixed
-      description: Render valid Prometheus alert groups and disable Flower consistently when configured false
-    - kind: fixed
-      description: Refresh the immutable Valkey 9.0.5 manifest digest after the upstream tag was republished
-    - kind: fixed
-      description: Preserve reviewed update branches and historical migration notes in release automation
-    - kind: fixed
-      description: Validate remote OCR mode and require enabled Flower for a ServiceMonitor
-    - kind: changed
-      description: Update migration guidance for fixed 3.0 issues, Python 3.14, remote OCR, and remaining legacy database limitations
+      description: Document and test the new classifier, regex timeout, barcode storage, scratch directory and Secret-backed AI settings
+    - kind: added
+      description: Validate upgrades from stable chart 0.4.0 in addition to the Paperless 2 baseline and Paperless 3 preview
   artifacthub.io/images: |
     - name: Paperless-ngx
-      image: ghcr.io/paperless-ngx/paperless-ngx@sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a
+      image: ghcr.io/paperless-ngx/paperless-ngx@sha256:9bc6e8248891bcfa6f52fffe8b81e4ea8cae75790c3ec1b9906961a7ba55c969
     - name: PostgreSQL
       image: docker.io/bitnamilegacy/postgresql@sha256:926356130b77d5742d8ce605b258d35db9b62f2f8fd1601f9dbaef0c8a710a8d
     - name: Valkey
