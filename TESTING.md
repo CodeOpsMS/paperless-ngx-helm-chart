@@ -4,7 +4,7 @@ The pull-request workflow uploads the exact packaged candidate as the immutable,
 attempt-specific artifact
 `paperless-ngx-candidate-<run-id>-<run-attempt>`. Kind validates that candidate
 on Kubernetes 1.34-1.36. Before publication, the same main CI
-artifact must pass both upgrades with monitoring and enforced NetworkPolicy in
+artifact must pass all three upgrades with monitoring and enforced NetworkPolicy in
 a new GitHub-hosted Kind cluster. See [CLUSTER-ACCEPTANCE.md](CLUSTER-ACCEPTANCE.md)
 for the mandatory, fully GitHub-hosted release dependency. No external cluster
 credentials or VPN are required for chart publication.
@@ -44,21 +44,22 @@ Identify the successful Helm CI run for the upgrade PR and download its
 candidate without rebuilding it locally:
 
 ```bash
-gh run list --workflow helm-ci.yml --branch codex/release-0.4.0
+gh run list --workflow helm-ci.yml --branch codex/release-paperless-3.3.4
 gh run download <run-id> --name paperless-ngx-candidate-<run-id>-<run-attempt> \
-  --dir /tmp/paperless-ngx-0.4.0-candidate
+  --dir /tmp/paperless-ngx-0.4.1-candidate
 ```
 
 Record the SHA-256 hash of the downloaded package in the PR acceptance comment.
 
-## Select both upgrade baselines
+## Select all three upgrade baselines
 
-Run both upgrade paths against that exact candidate:
+Run all three upgrade paths against that exact candidate:
 
 | Baseline chart | Baseline Paperless | Purpose |
 | --- | --- | --- |
 | `0.3.23` | `2.20.15` | Validate the major-version database and search migration |
 | `0.4.0-experimental.1` | `3.0.5` | Validate updates from an existing Paperless 3 preview |
+| `0.4.0` | `3.1.3` | Validate updates from the previous stable chart |
 
 `BASE_CHART_VERSION` selects the released chart from `BASE_CHART_REPOSITORY`
 (the project's Helm repository by default). `BASE_CHART_PACKAGE` selects an
@@ -71,6 +72,7 @@ released archives and checks these SHA-256 values before installing them:
 | --- | --- |
 | `0.3.23` | `6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22` |
 | `0.4.0-experimental.1` | `fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df` |
+| `0.4.0` | `9302bab2f19d01eaa79531297919abd57d8f44880e04cab4b69ee76a29511e58` |
 
 The Paperless 2 baseline seeds a Whoosh saved query using
 `note:E2E AND custom_field:E2E`; the candidate must migrate it to
@@ -188,11 +190,11 @@ BASE_HELM_BIN=/opt/homebrew/bin/helm \
 BASE_CHART_VERSION=0.3.23 \
 KUBE_CONTEXT=suseai \
 EXPECTED_KUBE_SERVER=https://rancherai.laemmerzahl.de/k8s/clusters/c-gf4m7 \
-NAMESPACE=paperless-v2-to-v313-e2e \
+NAMESPACE=paperless-v2-to-v334-e2e \
 RELEASE=paperless-v3-e2e \
 CLEANUP_NAMESPACE=false \
 scripts/paperless-e2e.sh upgrade \
-  /tmp/paperless-ngx-0.4.0-candidate/paperless-ngx-0.4.0.tgz
+  /tmp/paperless-ngx-0.4.1-candidate/paperless-ngx-0.4.1.tgz
 ```
 
 Repeat for the existing Paperless 3 preview in a different namespace. The
@@ -206,18 +208,20 @@ BASE_CHART_VERSION=0.4.0-experimental.1 \
 BASE_CHART_PACKAGE=/tmp/paperless-ngx-baselines/paperless-ngx-0.4.0-experimental.1.tgz \
 KUBE_CONTEXT=suseai \
 EXPECTED_KUBE_SERVER=https://rancherai.laemmerzahl.de/k8s/clusters/c-gf4m7 \
-NAMESPACE=paperless-v305-to-v313-e2e \
+NAMESPACE=paperless-v305-to-v334-e2e \
 RELEASE=paperless-v3-e2e \
 CLEANUP_NAMESPACE=false \
 scripts/paperless-e2e.sh upgrade \
-  /tmp/paperless-ngx-0.4.0-candidate/paperless-ngx-0.4.0.tgz
+  /tmp/paperless-ngx-0.4.1-candidate/paperless-ngx-0.4.1.tgz
 ```
 
 Omit `BASE_CHART_PACKAGE` to download the selected `BASE_CHART_VERSION` from
 the Helm repository instead. `BASE_HELM_BIN` may differ from `HELM_BIN` to
 exercise a Helm 3-to-4 upgrade. CI covers Helm 3-to-3, Helm 3-to-4, and Helm
-4-to-4 for the 2.20.15 baseline, plus Helm 4-to-4 for the 3.0.5 baseline. Run
-the two examples sequentially because they use the same local forwarding port.
+4-to-4 for the 2.20.15 baseline, plus Helm 4-to-4 for the 3.0.5 and 3.1.3 baselines. Repeat the preview
+example with `BASE_CHART_VERSION=0.4.0`, its matching baseline archive, and
+a new namespace to test stable 3.1.3. Run
+the examples sequentially because they use the same local forwarding port.
 
 Use a new, dedicated namespace and never point the runner at a production
 release. The runner creates the namespace itself and records both an ownership
@@ -263,7 +267,7 @@ production resource inventories, or complete Helm values:
 If credentials, cluster access, or any test fails, record the failed preflight
 or check and the remaining external-cluster rehearsal gap. A local render, an
 older candidate's success, or a green Kind job does not establish a result on
-the external target for this candidate and both baselines. This optional
+the external target for this candidate and all three baselines. This optional
 site-specific rehearsal is separate from the GitHub-hosted chart release gate.
 
 After evidence is captured, remove the namespace:
@@ -271,7 +275,7 @@ After evidence is captured, remove the namespace:
 ```bash
 set -euo pipefail
 context=suseai
-namespace=paperless-v2-to-v313-e2e
+namespace=paperless-v2-to-v334-e2e
 release=paperless-v3-e2e
 expected_server=https://rancherai.laemmerzahl.de/k8s/clusters/c-gf4m7
 

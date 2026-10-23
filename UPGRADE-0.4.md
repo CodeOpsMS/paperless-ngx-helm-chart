@@ -1,8 +1,9 @@
-# Upgrade to stable chart 0.4.0 and Paperless-ngx 3
+# Upgrade to stable chart 0.4.1 and Paperless-ngx 3
 
-Chart `0.4.0` is the stable release for Paperless-ngx 3.1.3.
-It supports upgrading the Paperless 2 baseline and the previous Paperless 3
-preview. Normal Helm version resolution now selects this Paperless 3 chart.
+Chart `0.4.1` is the stable release for Paperless-ngx 3.3.4.
+It supports upgrading the Paperless 2 baseline, the previous Paperless 3
+preview, and stable chart 0.4.0 with Paperless 3.1.3. Normal Helm version
+resolution now selects this Paperless 3 chart.
 Pin `--version 0.3.23` until the migration from Paperless 2 is prepared;
 unversioned upgrades can cross this application/database migration boundary.
 The historical Paperless 2 chart remains available, but is not a
@@ -20,18 +21,19 @@ copy of production data before scheduling the production change.
 |----------------|--------------------|--------------|
 | `0.3.23` | `2.20.15` | Full v2-to-v3 migration, including values, checksums, and search index |
 | `0.4.0-experimental.1` | `3.0.5` | Existing v3 database upgrade; retain its completed v3 migrations, Secrets, and PVCs |
+| `0.4.0` | `3.1.3` | Existing stable v3 database upgrade; retain Secrets and PVCs |
 
 - Only an existing **Paperless 2** installation must first reach exactly
   `2.20.15`. Its migration
   `documents.1075_workflowaction_order` must already be applied. Paperless 3
   refuses to start from any other Paperless 2 migration state.
-- An existing valid Paperless 3 database can upgrade directly to `3.1.3`; do
+- An existing valid Paperless 3 database can upgrade directly to `3.3.4`; do
   not downgrade it to Paperless 2 or attempt to replay the v2 migrations.
 - Upgrade the existing database and PVCs in place. Upstream only recommends
   import between matching Paperless versions, and an import must target a fully
   empty installation. Treat a Paperless 2 export as supplemental backup, not as
   a guaranteed Paperless 3 migration or rollback path.
-- Upgrade directly to `3.1.3`; do not stop on the broken `3.0.1` migration.
+- Upgrade directly to `3.3.4`; do not stop on the broken `3.0.1` migration.
 - Do not combine this change with an additional PostgreSQL/Valkey major-version,
   storage-class, ingress, or authentication-provider migration.
 - Ensure Kubernetes is at least `1.34`. On amd64, x86-64-v2 is required for the
@@ -52,14 +54,65 @@ kubectl exec deployment/paperless-ngx -n paperless-ngx -- \
   grep -F '[X] 1075_workflowaction_order'
 ```
 
-For an existing 3.0.5 installation, confirm `manage.py migrate --check`
+For an existing 3.0.5 or 3.1.3 installation, confirm `manage.py migrate --check`
 succeeds before maintenance instead. Follow the same backup, queue drain,
 complete application shutdown, and acceptance procedure below. The v2-only
 encryption removal, variable renames, task-history clearing, SHA-256 conversion,
 and Whoosh migration should already be complete. Paperless 3.1 adds database
 migrations for saved-view icons, workflow actions, and remote OCR settings.
 
-## Changes since Paperless 3.0.5
+## Changes since Paperless 3.1.3
+
+The target is [Paperless 3.3.4](https://github.com/paperless-ngx/paperless-ngx/releases/tag/v3.3.4),
+published on 2026-10-22. This security maintenance release updates certifi/uv
+for the eMudhra/emSign certificate incident and includes Pillow and aiohttp
+security updates. Chart 0.4.1 pins the official amd64/arm64 image index at
+`sha256:9bc6e8248891bcfa6f52fffe8b81e4ea8cae75790c3ec1b9906961a7ba55c969`.
+
+No new mandatory environment variable is required for an existing 3.1.3
+installation. Keep the same database, broker, application Secret and PVCs.
+Follow the backup, queue-drain and complete shutdown procedure below; new
+application migrations and search-index work still require a maintenance
+window. A Helm rollback does not reverse those migrations.
+
+Review the cumulative [3.2 and 3.3 changelog](https://github.com/paperless-ngx/paperless-ngx/blob/v3.3.4/docs/changelog.md)
+and [tagged configuration guide](https://github.com/paperless-ngx/paperless-ngx/blob/v3.3.4/docs/configuration.md):
+
+- Paperless 3.2 adds Whoosh-compatible advanced query parsing and improves
+  fuzzy/CJK search. Search indexes can rebuild automatically when files are
+  missing or a previous rebuild was interrupted. Budget storage and startup
+  time, and retest saved searches against representative documents.
+- Broker result keys now honor `PAPERLESS_REDIS_PREFIX`. Keep all web/worker
+  processes on the same Paperless version and prefix. Do not rely on old task
+  result keys remaining visible after the upgrade.
+- Mail processing uses a self-expiring overlap lock. The consumer fixes
+  empty-file tracking after the stability window; validate scanner delivery
+  and `PAPERLESS_CONSUMER_STABILITY_DELAY` on the actual storage.
+- The classifier now applies `PAPERLESS_CLASSIFIER_MATCH_THRESHOLD` (default
+  `0.3`) to correspondent, document-type and storage-path assignments. Review
+  automated classification results. `PAPERLESS_MATCH_REGEX_TIMEOUT_SECONDS`
+  defaults to `0.1` and can be raised for slow, valid matching rules.
+- `PAPERLESS_CONSUMER_STORE_BARCODE_VALUES` defaults to `false`. Enable it
+  explicitly to retain detected barcode contents.
+- `PAPERLESS_SCRATCH_DIR` defaults to `/tmp/paperless`. Its workspace must be
+  writable and have sufficient capacity for ingestion, editing and exports.
+- AI remains opt-in. `PAPERLESS_AI_LLM_EMBEDDING_API_KEY` can reference a
+  separate Kubernetes Secret; when omitted it falls back to the main LLM key.
+  `PAPERLESS_AI_LLM_EXTRA_PARAMS` accepts a JSON object encoded as a YAML
+  string and overrides provider request parameters without upstream validation.
+  Test the selected provider and embeddings separately when using these options.
+- Document-version authorization, bulk operations, exporter filenames and
+  subpath redirects receive fixes in 3.3. Retest integrations that use them.
+  API versions remain 9 and 10.
+
+Use the existing `env` mapping for these optional settings; commented examples
+are in `values.yaml`. Increment `config.secretRevision` when changing scalar
+settings or the contents of referenced Secrets. Never store API keys inline
+in a published values file. The release tests cover upgrades from stable
+0.4.0/3.1.3 as well as both older baselines; external AI/OCR providers remain
+an installation-specific rehearsal.
+
+## Earlier changes since Paperless 3.0.5
 
 The [3.1.3 release](https://github.com/paperless-ngx/paperless-ngx/releases/tag/v3.1.3)
 includes the security fix introduced in 3.1.2 for
@@ -67,9 +120,9 @@ includes the security fix introduced in 3.1.2 for
 The advisory lists versions through 3.1.1 as affected by path traversal when
 `PAPERLESS_FILENAME_FORMAT_REMOVE_NONE` is enabled and a user can influence the
 filename template or relevant metadata. Upgrade to the patched release.
-The latest upstream release was checked again on 2026-09-12: 3.1.3 is still
-current. Stable chart 0.4.0 removes the preview designation without changing
-the reviewed 3.1.3 application image or introducing a database-engine upgrade.
+Historical chart 0.4.0 promoted the reviewed 3.1.3 image to stable.
+Chart 0.4.1 now updates that image to 3.3.4; database and broker engine
+major versions remain unchanged.
 
 The [3.1.0 release](https://github.com/paperless-ngx/paperless-ngx/releases/tag/v3.1.0)
 fixes explicit search-language startup, orphaned Tantivy segment growth, and
@@ -102,7 +155,7 @@ for the exact settings and defaults.
 
 ## Paperless 3 preflight
 
-Review the official [v3 migration guide for 3.1.3](https://github.com/paperless-ngx/paperless-ngx/blob/v3.1.3/docs/migration-v3.md)
+Review the official [v3 migration guide for 3.3.4](https://github.com/paperless-ngx/paperless-ngx/blob/v3.3.4/docs/migration-v3.md)
 and resolve every applicable item. The v2 migration changes below apply only
 when crossing from Paperless 2; existing v3 installations should verify the
 resulting settings and data rather than repeat already completed migrations:
@@ -163,8 +216,8 @@ resulting settings and data rather than repeat already completed migrations:
   `notes.note:` and `custom_fields.value:` field names. Explicit old field names
   are migrated, but unqualified search terms cannot be rewritten reliably and
   must be validated manually. Inventory and test complex Whoosh queries too:
-  saved views using wildcards or regex-like character classes can remain invalid
-  in 3.1.3 (see upstream
+  saved views using wildcards or regex-like character classes could remain invalid
+  in 3.1.3 before the 3.2 query-parser update (see upstream
   [issue #13568](https://github.com/paperless-ngx/paperless-ngx/issues/13568)).
 - Budget time and storage I/O for the first start: Paperless converts every
   present original/archive file checksum from MD5 to SHA-256 sequentially and
@@ -194,7 +247,7 @@ resulting settings and data rather than repeat already completed migrations:
   replica, especially on NFS/RWX storage. For MariaDB with binary logging, use
   `binlog_format=ROW`. The chart's default PostgreSQL path is unaffected.
 - Rebuild and retest custom images and native extensions. Paperless 3 requires
-  Python 3.11 or newer; the official 3.1.3 image now uses Python 3.14 on Debian
+  Python 3.11 or newer; the official 3.3.4 image uses Python 3.14 on Debian
   Trixie. A ZIP export using the new `zstd` compression option requires Python
   3.14 or newer on both export and import runtimes; `deflated` remains the
   portable default.
@@ -202,10 +255,11 @@ resulting settings and data rather than repeat already completed migrations:
   use `latest`, which now resolves to Tika 4 and breaks Office/EML consumption
   with Paperless 3.1.3 (confirmed by the maintainer in
   [discussion #13995](https://github.com/paperless-ngx/paperless-ngx/discussions/13995)).
-- Test network-scanner deliveries into the consume directory. There are
-  unresolved reports of 3.1.3 trying to consume an initial zero-byte file and
-  not retrying when the scanner finishes writing it
+- Test network-scanner deliveries into the consume directory. Historical reports
+  describe 3.1.3 trying to consume an initial zero-byte file
+  and not retrying when the scanner finishes writing it
   ([discussion #13969](https://github.com/paperless-ngx/paperless-ngx/discussions/13969)).
+  Paperless 3.2 fixes empty-file tracking after the stability window.
   Prefer atomically moving a completed file into that directory. When the
   scanner cannot do that, validate `PAPERLESS_CONSUMER_STABILITY_DELAY` and,
   where needed, `PAPERLESS_CONSUMER_POLLING_INTERVAL` against its delivery
@@ -216,7 +270,7 @@ its default database. Before shutting down Paperless 2, run its documented
 `decrypt_documents` management command if document or thumbnail encryption was
 ever enabled, and verify that no encrypted files remain.
 
-The `0.4.0` values schema rejects chart-managed settings and
+The `0.4.1` values schema rejects chart-managed settings and
 removed Paperless 2 variables when they are supplied through `env`.
 `env.PAPERLESS_ENABLE_FLOWER` must be a YAML boolean. `false` is rendered as
 an empty environment value so the image actually disables Flower; a quoted
@@ -225,13 +279,13 @@ an empty environment value so the image actually disables Flower; a quoted
 
 ## Values migration
 
-Create a reviewed values file from the `0.4.0` defaults. For
-chart `0.3.23`, apply the mappings below. For `0.4.0-experimental.1`, retain the
+Create a reviewed values file from the `0.4.1` defaults. For
+chart `0.3.23`, apply the mappings below. For `0.4.0-experimental.1` or `0.4.0`, retain the
 already migrated Secret references and storage configuration, revalidate the
 values against the new schema, and review the 3.1 changes above. Do not use
 `--reuse-values`.
 
-| Chart 0.3.x | Chart 0.4.0 |
+| Chart 0.3.x | Chart 0.4.1 |
 |-------------|----------------------------|
 | `config.database.pass` for an external database | `config.database.password` or, preferably, `config.database.existingSecret` |
 | `config.database.name` / `user` for the bundled database | Keep their new defaults and configure `postgresql.auth.database` / `username` |
@@ -259,9 +313,9 @@ values against the new schema, and review the 3.1 changes above. Do not use
 Validate the migrated file before touching the cluster:
 
 ```bash
-candidate=/tmp/paperless-ngx-0.4.0.tgz
+candidate=/tmp/paperless-ngx-0.4.1.tgz
 helm pull paperless/paperless-ngx \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --destination /tmp
 
 helm lint "$candidate" \
@@ -423,13 +477,13 @@ not validate those integrations.
    remains compatible with Helm 4 server-side apply and does not create an
    extra application pod. It does **not** replace this explicit shutdown: only
    scaling to zero and waiting for completion proves that no old Paperless
-   process remains when the new version starts. This matters for both upgrade
+   process remains when the new version starts. This matters for all upgrade
    baselines when applying database migrations.
 
 4. Upgrade with the reviewed values file and the exact validated chart package:
 
    ```bash
-   candidate=/tmp/paperless-ngx-0.4.0.tgz
+   candidate=/tmp/paperless-ngx-0.4.1.tgz
    test -f "$candidate"
    helm upgrade paperless-ngx "$candidate" \
      --namespace paperless-ngx \
@@ -455,7 +509,7 @@ not validate those integrations.
    completed migration, availability-oriented values such as `maxSurge: 1` and
    `maxUnavailable: 0` may be tested and applied for subsequent upgrades.
 
-5. Follow the Paperless logs. Both baselines apply any new database migrations.
+5. Follow the Paperless logs. All baselines apply any new database migrations.
    The first upgrade from Paperless 2 additionally converts document checksums
    and rebuilds the incompatible Whoosh search index as Tantivy. An already
    migrated 3.0.5 database does not repeat those conversions; an intentional
@@ -469,7 +523,7 @@ not validate those integrations.
 Before ending maintenance, verify:
 
 - the Paperless pod is Ready and all probes are healthy;
-- `/api/status/` reports Paperless 3.1.3, PostgreSQL status `OK`, no unapplied
+- `/api/status/` reports Paperless 3.3.4, PostgreSQL status `OK`, no unapplied
   migrations, a healthy Redis/Valkey connection, and a healthy search index;
 - the bundled legacy rehearsal still reports PostgreSQL 17.6 and uses the
   original PVC; an externally managed database retains its reviewed version
@@ -498,7 +552,7 @@ HPA only in a separate reviewed Helm change.
 ## Recovery
 
 Do not run `helm rollback` against a database already changed by the new
-Paperless migrations, including a 3.0.5-to-3.1.3 upgrade.
+Paperless migrations, including a 3.1.3-to-3.3.4 upgrade.
 
 If acceptance fails:
 
@@ -509,8 +563,9 @@ If acceptance fails:
 4. Restore the Paperless persistent volume from the matching backup.
 5. Restore the original Secret, especially the exact `PAPERLESS_SECRET_KEY`.
 6. Reinstall the exact original chart and Paperless version with the saved
-   pre-upgrade values: `0.3.23`/`2.20.15` for the v2 baseline or
-   `0.4.0-experimental.1`/`3.0.5` for the v3 baseline. Only use the matching
+   pre-upgrade values: `0.3.23`/`2.20.15` for the v2 baseline,
+   `0.4.0-experimental.1`/`3.0.5` for the preview, or `0.4.0`/`3.1.3`
+   for the stable v3 baseline. Only use the matching
    restored database and files, never the database migrated by the failed upgrade.
 7. Re-run document-count, authentication, search, and file-hash checks before
    reopening the service.

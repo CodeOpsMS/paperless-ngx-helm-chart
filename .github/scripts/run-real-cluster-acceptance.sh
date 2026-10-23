@@ -30,10 +30,12 @@ acceptance() {
   jq -e '.reclaimPolicy == "Delete"' <<<"$storage" >/dev/null
   kubectl --context "$KUBE_CONTEXT" get crd servicemonitors.monitoring.coreos.com \
     prometheuses.monitoring.coreos.com prometheusrules.monitoring.coreos.com >/dev/null
-  for baseline in 0.3.23 0.4.0-experimental.1; do
+  for baseline in 0.3.23 0.4.0-experimental.1 0.4.0; do
     case "$baseline" in
       0.3.23) baseline_sha=6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22; suffix=v2 ;;
-      *) baseline_sha=fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df; suffix=v3 ;;
+      0.4.0-experimental.1) baseline_sha=fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df; suffix=v3 ;;
+      0.4.0) baseline_sha=9302bab2f19d01eaa79531297919abd57d8f44880e04cab4b69ee76a29511e58; suffix=v313 ;;
+      *) return 1 ;;
     esac
     curl --fail --silent --show-error --location --retry 3 \
       "https://codeopsms.github.io/paperless-ngx-helm-chart/paperless-ngx-${baseline}.tgz" \
@@ -59,4 +61,4 @@ if [[ "$result" -ne 0 ]]; then
   exit "$result"
 fi
 printf 'sha256=%s\nsource_sha=%s\n' "$candidate_sha" "$SOURCE_SHA" >>"$GITHUB_OUTPUT"
-echo "Both real-cluster upgrades, monitoring, broker checks and cleanup passed: ${candidate_sha}"
+echo "All three real-cluster upgrades, monitoring, broker checks and cleanup passed: ${candidate_sha}"

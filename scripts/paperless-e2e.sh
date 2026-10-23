@@ -1018,7 +1018,7 @@ install_upgrade_base() {
     | awk '/^appVersion:/ { gsub(/"/, "", $2); print $2 }')
   case "$BASE_PAPERLESS_VERSION" in
     2.20.15) API_ACCEPT=application/json ;;
-    3.0.5) API_ACCEPT='application/json; version=10' ;;
+    3.0.5|3.1.3) API_ACCEPT='application/json; version=10' ;;
     *)
       echo "Unsupported baseline appVersion: ${BASE_PAPERLESS_VERSION:-missing}" >&2
       return 1

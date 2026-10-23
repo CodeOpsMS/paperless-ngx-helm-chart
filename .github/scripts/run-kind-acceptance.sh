@@ -13,10 +13,12 @@ candidate_sha=$(sha256sum "$candidate" | awk '{print $1}')
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 
-for baseline in 0.3.23 0.4.0-experimental.1; do
+for baseline in 0.3.23 0.4.0-experimental.1 0.4.0; do
   case "$baseline" in
     0.3.23) baseline_sha=6202d81c112d3e810d9abb37e16d5aa141a7b6a4e85911d4ff0c257f275beb22; suffix=v2 ;;
-    *) baseline_sha=fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df; suffix=v3 ;;
+    0.4.0-experimental.1) baseline_sha=fcd72197aeb88735f64ba571d65ff882999ada4507238ce86bc7ee5e952d72df; suffix=v3 ;;
+    0.4.0) baseline_sha=9302bab2f19d01eaa79531297919abd57d8f44880e04cab4b69ee76a29511e58; suffix=v313 ;;
+    *) exit 1 ;;
   esac
   curl --fail --silent --show-error --location --retry 3 \
     "https://github.com/CodeOpsMS/paperless-ngx-helm-chart/releases/download/paperless-ngx-${baseline}/paperless-ngx-${baseline}.tgz" \
@@ -30,7 +32,7 @@ for baseline in 0.3.23 0.4.0-experimental.1; do
     scripts/paperless-e2e.sh upgrade "$candidate"
 done
 
-# Emit approval only after both tests, namespace cleanup and unchanged bytes.
+# Emit approval only after all tests, namespace cleanup and unchanged bytes.
 test "$(sha256sum "$candidate" | awk '{print $1}')" = "$candidate_sha"
 printf 'sha256=%s\nsource_sha=%s\n' "$candidate_sha" "$SOURCE_SHA" >>"$GITHUB_OUTPUT"
-echo "Both GitHub Kind upgrades, monitoring, broker checks and cleanup passed: ${candidate_sha}"
+echo "All three GitHub Kind upgrades, monitoring, broker checks and cleanup passed: ${candidate_sha}"

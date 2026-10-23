@@ -1,8 +1,63 @@
-suite: Paperless 3.1 configuration compatibility
+suite: Paperless 3.3 configuration compatibility
 templates:
   - templates/secrets.yaml
   - templates/deployment.yaml
 tests:
+  - it: renders optional Paperless 3.2 and 3.3 settings with their scalar types
+    template: templates/secrets.yaml
+    set:
+      env.PAPERLESS_CLASSIFIER_MATCH_THRESHOLD: 0.3
+      env.PAPERLESS_MATCH_REGEX_TIMEOUT_SECONDS: 0.1
+      env.PAPERLESS_CONSUMER_STORE_BARCODE_VALUES: true
+      env.PAPERLESS_SCRATCH_DIR: /tmp/paperless
+      env.PAPERLESS_AI_LLM_EXTRA_PARAMS: '{"temperature": 0.2}'
+    asserts:
+      - equal:
+          path: data.PAPERLESS_CLASSIFIER_MATCH_THRESHOLD
+          value: MC4z
+      - equal:
+          path: data.PAPERLESS_MATCH_REGEX_TIMEOUT_SECONDS
+          value: MC4x
+      - equal:
+          path: data.PAPERLESS_CONSUMER_STORE_BARCODE_VALUES
+          value: dHJ1ZQ==
+      - equal:
+          path: data.PAPERLESS_SCRATCH_DIR
+          value: L3RtcC9wYXBlcmxlc3M=
+      - equal:
+          path: data.PAPERLESS_AI_LLM_EXTRA_PARAMS
+          value: eyJ0ZW1wZXJhdHVyZSI6IDAuMn0=
+
+  - it: reads a separate embedding API key directly from an existing Secret
+    template: templates/deployment.yaml
+    set:
+      env.PAPERLESS_AI_LLM_EMBEDDING_API_KEY:
+        valueFrom:
+          secretKeyRef:
+            name: paperless-ai
+            key: embedding-api-key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PAPERLESS_AI_LLM_EMBEDDING_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: paperless-ai
+                key: embedding-api-key
+
+  - it: leaves a Secret-backed embedding API key out of the chart-managed Secret
+    template: templates/secrets.yaml
+    set:
+      env.PAPERLESS_AI_LLM_EMBEDDING_API_KEY:
+        valueFrom:
+          secretKeyRef:
+            name: paperless-ai
+            key: embedding-api-key
+    asserts:
+      - notExists:
+          path: data.PAPERLESS_AI_LLM_EMBEDDING_API_KEY
+
   - it: permits an explicit Tantivy search language after the upstream startup fix
     template: templates/secrets.yaml
     set:

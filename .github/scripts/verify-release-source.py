@@ -12,9 +12,9 @@ REQUIRED_JOBS = (
     ("Build immutable candidate", 1, "Upload candidate chart"),
     ("Required install / Helm ", 1, "Run fresh-install E2E"),
     ("Full install / Helm ", 6, "Install immutable candidate"),
-    ("Upgrade / ", 4, "Run application upgrade E2E"),
+    ("Upgrade / ", 5, "Run application upgrade E2E"),
     ("Monitoring / ", 1, "Test ServiceMonitor, Flower scrape, alert rules and traffic isolation"),
-    ("GitHub Kubernetes acceptance / ", 1, "Test both baselines with monitoring and enforced NetworkPolicy"),
+    ("GitHub Kubernetes acceptance / ", 1, "Test all three baselines with monitoring and enforced NetworkPolicy"),
 )
 
 

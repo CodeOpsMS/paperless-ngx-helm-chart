@@ -14,12 +14,12 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 > It is not an official Paperless-ngx chart and does not receive official
 > support from the Paperless-ngx project.
 
-> **Stable Paperless 3 release:** Chart `0.4.0` deploys
-> Paperless-ngx 3.1.3 and replaces `0.3.23` as the stable default.
+> **Stable Paperless 3 release:** Chart `0.4.1` deploys
+> Paperless-ngx 3.3.4 and replaces `0.3.23` as the stable default.
 > Existing Paperless 2 installations must follow [UPGRADE-0.4.md](UPGRADE-0.4.md)
 > before upgrading. Pin `--version 0.3.23` until that migration is prepared.
 
-This chart deploys Paperless-ngx 3.1.3 with optional PostgreSQL and
+This chart deploys Paperless-ngx 3.3.4 with optional PostgreSQL and
 Valkey dependencies. The default deployment retains legacy PostgreSQL 17.6 for
 upgrade testing and uses Valkey
 9.0.5. All default container images are pinned to immutable multi-platform
@@ -57,7 +57,7 @@ The separate 3.0.5 OCR failure on this hardware is fixed in the 3.1 line; test
 the actual hardware before relying on this configuration. See
 [UPGRADE-0.4.md](UPGRADE-0.4.md) for details.
 
-The tested dependency versions for chart 0.4.0 are:
+The tested dependency versions for chart 0.4.1 are:
 
 | Component | Chart | Application |
 |-----------|-------|-------------|
@@ -84,7 +84,7 @@ only `postgresql.image.repository` to migrate a database.
 helm repo add paperless https://codeopsms.github.io/paperless-ngx-helm-chart/
 helm repo update
 helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -99,7 +99,7 @@ guide, backups, and full application shutdown have been addressed.
 ```bash
 helm install paperless-ngx \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -110,7 +110,8 @@ Historical chart versions remain addressable by explicit version:
 |---------------|---------------|---------|
 | `0.3.23` | `2.20.15` | Last Paperless 2 release |
 | `0.4.0-experimental.1` | `3.0.5` | Historical Paperless 3 preview |
-| `0.4.0` | `3.1.3` | Current stable Paperless 3 release |
+| `0.4.0` | `3.1.3` | Previous stable Paperless 3 release |
+| `0.4.1` | `3.3.4` | Current stable Paperless 3 release |
 
 Chart 0.3.23 remains available for existing Paperless 2 installations, but it
 is a historical release and does not receive Paperless 3 fixes or current
@@ -128,7 +129,7 @@ helm install paperless-v2 \
 
 helm install paperless-v3 \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.0 \
+  --version 0.4.1 \
   --namespace paperless-v3 \
   --create-namespace
 ```
@@ -195,7 +196,7 @@ changed after registration.
 
 ### From chart 0.3.x and Paperless 2
 
-Chart 0.4.0 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.1.3. Do not
+Chart 0.4.1 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.3.4. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
 rely on `helm rollback` after the database migration has run.
 
@@ -205,12 +206,13 @@ procedure, controlled application shutdown, validation, and recovery steps.
 
 PostgreSQL remains at 17.6, while Valkey is updated within major version 9 from
 9.0.2 to 9.0.5. No database-engine or broker major migration is performed by
-chart 0.4.0.
+chart 0.4.1.
 
-### Upgrading the previous Paperless 3 preview
+### Upgrading an existing Paperless 3 installation
 
-Chart `0.4.0-experimental.1` with Paperless `3.0.5` can upgrade directly to
-`0.4.0` with Paperless `3.1.3`.
+Chart `0.4.0` with Paperless `3.1.3`, and the earlier
+`0.4.0-experimental.1` preview with Paperless `3.0.5`, can upgrade directly to
+`0.4.1` with Paperless `3.3.4`.
 Its existing v3 database does not need the v2 migration prerequisite or another
 Whoosh/checksum conversion. Back up and rehearse recovery, drain tasks, stop
 the application completely, and apply the reviewed values to the same database,
@@ -223,9 +225,32 @@ the index. Version 3.1.3 includes the fix for
 [GHSA-2jhj-xqrq-rmrq](https://github.com/paperless-ngx/paperless-ngx/security/advisories/GHSA-2jhj-xqrq-rmrq),
 uses Python 3.14 in the official image, and respects archive settings for remote
 OCR. Review optional OIDC role synchronization and remote OCR settings before
-using them. API versions remain 9 and 10. Tika 4 and some complex Whoosh saved
-queries remain incompatible, and network-scanner partial-file delivery needs
-an environment-specific test; the upgrade guide covers these limitations.
+using them. API versions remain 9 and 10. Paperless 3.2 adds a Whoosh-compatible
+advanced-query parser and fixes empty-file tracking and broker result-key
+prefixes. Retest saved searches and scanner delivery against your own data.
+External Tika 4 remains outside the documented Tika 3 integration.
+
+Paperless [3.3.4](https://github.com/paperless-ngx/paperless-ngx/releases/tag/v3.3.4)
+is a security maintenance release addressing the eMudhra/emSign certificate
+incident and vulnerable Pillow/aiohttp dependencies. The chart pins its
+multi-platform image digest. No additional environment variable is required
+for the upgrade from 3.1.3; optional new settings use the existing `env` mapping:
+
+| Setting | Upstream default / use |
+| --- | --- |
+| `PAPERLESS_CLASSIFIER_MATCH_THRESHOLD` | `0.3`; minimum classifier confidence |
+| `PAPERLESS_MATCH_REGEX_TIMEOUT_SECONDS` | `0.1`; regex timeout in seconds |
+| `PAPERLESS_CONSUMER_STORE_BARCODE_VALUES` | `false`; retain detected barcode contents |
+| `PAPERLESS_SCRATCH_DIR` | `/tmp/paperless`; writable temporary workspace |
+| `PAPERLESS_AI_LLM_EMBEDDING_API_KEY` | Falls back to the main LLM key; use `valueFrom.secretKeyRef` |
+| `PAPERLESS_AI_LLM_EXTRA_PARAMS` | Empty; pass a JSON object as a YAML string |
+
+These examples are commented in `values.yaml` so upstream defaults remain
+effective. AI providers remain opt-in. Keep scratch space writable and large
+enough for document processing and export. Increment `config.secretRevision`
+when changing scalar settings or referenced Secret contents. See the
+[tagged configuration guide](https://github.com/paperless-ngx/paperless-ngx/blob/v3.3.4/docs/configuration.md)
+and [UPGRADE-0.4.md](UPGRADE-0.4.md) for migration details.
 
 `env.PAPERLESS_ENABLE_FLOWER` now requires a YAML boolean. Set `false` to
 disable Flower; the chart renders an empty environment value because the image
@@ -263,12 +288,12 @@ helm-unittest, fixed dependency-archive and container-image digests, Kubernetes
 server-side dry runs, and a required Kubernetes 1.36 installation. One candidate
 package is reused byte-for-byte by all installation and upgrade jobs. The
 Paperless update PRs, release branches, and the daily workflow additionally test fresh installs
-on Kubernetes 1.34-1.36 and upgrades from Paperless 2.20.15 and the previous
-Paperless 3.0.5 preview across Helm 3 and Helm 4. A separate Cilium-backed Kind
+on Kubernetes 1.34-1.36 and upgrades from Paperless 2.20.15, the previous
+Paperless 3.0.5 preview, and stable Paperless 3.1.3 across Helm 3 and Helm 4. A separate Cilium-backed Kind
 job tests real Prometheus Operator reconciliation, Flower scraping, alert-rule
 evaluation, and allowed/denied metrics network paths.
 
-Publication additionally requires both upgrades with monitoring and enforced
+Publication additionally requires all three upgrades with monitoring and enforced
 NetworkPolicy in a disposable GitHub-hosted Kind cluster, using the exact main
 CI candidate. The shared acceptance workflow is also exercised in release-branch
 CI. The release job requires every expected CI test to succeed, successful Kind
@@ -361,7 +386,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | grafana.dashboards.annotations | object | `{}` |  |
 | grafana.dashboards.enabled | bool | `false` |  |
 | grafana.dashboards.labels.grafana_dashboard | string | `"1"` |  |
-| image.digest | string | `"sha256:aa810a36942c63d4ee70d00eda7236cd3d6acfb7eb3f7987fb568ed14df8817a"` | Immutable multi-platform image digest. When set, it overrides the tag. |
+| image.digest | string | `"sha256:9bc6e8248891bcfa6f52fffe8b81e4ea8cae75790c3ec1b9906961a7ba55c969"` | Immutable multi-platform image digest. When set, it overrides the tag. |
 | image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. (could be overwritten by global.image.pullPolicy) |
 | image.registry | string | `"ghcr.io"` | image registry (could be overwritten by global.image.registry) |
 | image.repository | string | `"paperless-ngx/paperless-ngx"` | image repository |
@@ -438,7 +463,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | strategy.type | string | `"RollingUpdate"` | Deployment strategy. Zero surge avoids creating an extra application pod. RollingUpdate is the only supported type because Helm 4 server-side apply cannot safely clear the old rollingUpdate field during a live switch to Recreate. The disruptive defaults cause downtime on every rollout. The Paperless 3 upgrade still requires the documented complete scale-to-zero and wait procedure. |
 | terminationGracePeriodSeconds | int | `60` | Grace period for Paperless workers to stop cleanly. |
 | tests.enabled | bool | `true` | Enable the Helm connectivity test pod. |
-| tests.image.digest | string | `"sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616"` |  |
+| tests.image.digest | string | `"sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e"` |  |
 | tests.image.pullPolicy | string | `"IfNotPresent"` |  |
 | tests.image.repository | string | `"busybox"` |  |
 | tests.image.tag | string | `"1.38.0"` |  |
