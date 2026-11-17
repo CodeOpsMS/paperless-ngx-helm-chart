@@ -8,7 +8,7 @@ create_metrics_probe() {
       labels:{"paperless-e2e-metrics":$access}},spec:{automountServiceAccountToken:false,
       restartPolicy:"Never",securityContext:{runAsNonRoot:true,runAsUser:1000,
         seccompProfile:{type:"RuntimeDefault"}},containers:[{name:"probe",
-        image:"busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e",
+        image:"busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4",
         command:["sh","-c","sleep 1800"],securityContext:{allowPrivilegeEscalation:false,
           capabilities:{drop:["ALL"]}},resources:{requests:{cpu:"10m",memory:"16Mi"},
           limits:{cpu:"100m",memory:"32Mi"}}}]}}
