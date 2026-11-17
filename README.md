@@ -14,7 +14,7 @@ description: "A community Helm chart for deploying Paperless-ngx on Kubernetes."
 > It is not an official Paperless-ngx chart and does not receive official
 > support from the Paperless-ngx project.
 
-> **Stable Paperless 3 release:** Chart `0.4.1` deploys
+> **Stable Paperless 3 release:** Chart `0.4.2` deploys
 > Paperless-ngx 3.3.4 and replaces `0.3.23` as the stable default.
 > Existing Paperless 2 installations must follow [UPGRADE-0.4.md](UPGRADE-0.4.md)
 > before upgrading. Pin `--version 0.3.23` until that migration is prepared.
@@ -57,7 +57,7 @@ The separate 3.0.5 OCR failure on this hardware is fixed in the 3.1 line; test
 the actual hardware before relying on this configuration. See
 [UPGRADE-0.4.md](UPGRADE-0.4.md) for details.
 
-The tested dependency versions for chart 0.4.1 are:
+The tested dependency versions for chart 0.4.2 are:
 
 | Component | Chart | Application |
 |-----------|-------|-------------|
@@ -84,7 +84,7 @@ only `postgresql.image.repository` to migrate a database.
 helm repo add paperless https://codeopsms.github.io/paperless-ngx-helm-chart/
 helm repo update
 helm install paperless-ngx paperless/paperless-ngx \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -99,7 +99,7 @@ guide, backups, and full application shutdown have been addressed.
 ```bash
 helm install paperless-ngx \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace paperless-ngx \
   --create-namespace
 ```
@@ -111,7 +111,7 @@ Historical chart versions remain addressable by explicit version:
 | `0.3.23` | `2.20.15` | Last Paperless 2 release |
 | `0.4.0-experimental.1` | `3.0.5` | Historical Paperless 3 preview |
 | `0.4.0` | `3.1.3` | Previous stable Paperless 3 release |
-| `0.4.1` | `3.3.4` | Current stable Paperless 3 release |
+| `0.4.2` | `3.3.4` | Current stable Paperless 3 release |
 
 Chart 0.3.23 remains available for existing Paperless 2 installations, but it
 is a historical release and does not receive Paperless 3 fixes or current
@@ -129,7 +129,7 @@ helm install paperless-v2 \
 
 helm install paperless-v3 \
   oci://ghcr.io/codeopsms/helm-charts/paperless-ngx \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace paperless-v3 \
   --create-namespace
 ```
@@ -196,7 +196,7 @@ changed after registration.
 
 ### From chart 0.3.x and Paperless 2
 
-Chart 0.4.1 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.3.4. Do not
+Chart 0.4.2 is a breaking upgrade from Paperless-ngx 2.20.15 to 3.3.4. Do not
 upgrade from an older Paperless release, do not use `--reuse-values`, and do not
 rely on `helm rollback` after the database migration has run.
 
@@ -206,13 +206,13 @@ procedure, controlled application shutdown, validation, and recovery steps.
 
 PostgreSQL remains at 17.6, while Valkey is updated within major version 9 from
 9.0.2 to 9.0.5. No database-engine or broker major migration is performed by
-chart 0.4.1.
+chart 0.4.2.
 
 ### Upgrading an existing Paperless 3 installation
 
 Chart `0.4.0` with Paperless `3.1.3`, and the earlier
 `0.4.0-experimental.1` preview with Paperless `3.0.5`, can upgrade directly to
-`0.4.1` with Paperless `3.3.4`.
+`0.4.2` with Paperless `3.3.4`.
 Its existing v3 database does not need the v2 migration prerequisite or another
 Whoosh/checksum conversion. Back up and rehearse recovery, drain tasks, stop
 the application completely, and apply the reviewed values to the same database,
@@ -463,7 +463,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | strategy.type | string | `"RollingUpdate"` | Deployment strategy. Zero surge avoids creating an extra application pod. RollingUpdate is the only supported type because Helm 4 server-side apply cannot safely clear the old rollingUpdate field during a live switch to Recreate. The disruptive defaults cause downtime on every rollout. The Paperless 3 upgrade still requires the documented complete scale-to-zero and wait procedure. |
 | terminationGracePeriodSeconds | int | `60` | Grace period for Paperless workers to stop cleanly. |
 | tests.enabled | bool | `true` | Enable the Helm connectivity test pod. |
-| tests.image.digest | string | `"sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e"` |  |
+| tests.image.digest | string | `"sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4"` |  |
 | tests.image.pullPolicy | string | `"IfNotPresent"` |  |
 | tests.image.repository | string | `"busybox"` |  |
 | tests.image.tag | string | `"1.38.0"` |  |

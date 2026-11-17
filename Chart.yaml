@@ -7,7 +7,7 @@ type: application
 kubeVersion: ">=1.34.0-0"
 icon: https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docs/assets/logo_leaf.svg
 home: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
-version: "0.4.1"
+version: "0.4.2"
 # renovate: image=ghcr.io/paperless-ngx/paperless-ngx
 appVersion: "3.3.4"
 keywords:
@@ -26,16 +26,10 @@ sources:
   - https://codeberg.org/wrenix/helm-charts/src/branch/main/paperless-ngx
 annotations:
   artifacthub.io/prerelease: "false"
-  artifacthub.io/containsSecurityUpdates: "true"
+  artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/changes: |
-    - kind: changed
-      description: Upgrade Paperless-ngx from 3.1.3 to 3.3.4 with the eMudhra/emSign certificate incident response and Pillow/aiohttp security updates
-    - kind: added
-      description: Document and test the new classifier, regex timeout, barcode storage, scratch directory and Secret-backed AI settings
-    - kind: added
-      description: Validate upgrades from stable chart 0.4.0 in addition to the Paperless 2 baseline and Paperless 3 preview
     - kind: fixed
-      description: Refresh the immutable BusyBox 1.38.0 multi-platform digest used by Helm and monitoring tests
+      description: Refresh the immutable BusyBox 1.38.0 multi-platform digest used by Helm and monitoring tests after upstream republishing
   artifacthub.io/images: |
     - name: Paperless-ngx
       image: ghcr.io/paperless-ngx/paperless-ngx@sha256:9bc6e8248891bcfa6f52fffe8b81e4ea8cae75790c3ec1b9906961a7ba55c969
@@ -44,7 +38,7 @@ annotations:
     - name: Valkey
       image: docker.io/valkey/valkey:9.0.5@sha256:4c64dfeae602349cd38b70ecfc631ab99624283cd975f34f96a72c6050f1b890
     - name: Helm test
-      image: docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+      image: docker.io/library/busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
   artifacthub.io/links: |
     - name: Chart source
       url: https://github.com/CodeOpsMS/paperless-ngx-helm-chart
