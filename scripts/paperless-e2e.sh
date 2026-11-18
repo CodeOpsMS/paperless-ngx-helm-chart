@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=scripts/e2e-port-forward.sh
+source "$SCRIPT_DIR/e2e-port-forward.sh"
 
 MODE=${1:?Usage: paperless-e2e.sh fresh|upgrade CANDIDATE_CHART}
 CANDIDATE_CHART=${2:?Usage: paperless-e2e.sh fresh|upgrade CANDIDATE_CHART}
@@ -278,13 +280,11 @@ ensure_e2e_namespace() {
 
 stop_port_forward() {
   if [[ -n "${PROMETHEUS_FORWARD_PID:-}" ]]; then
-    kill "$PROMETHEUS_FORWARD_PID" >/dev/null 2>&1 || true
-    wait "$PROMETHEUS_FORWARD_PID" >/dev/null 2>&1 || true
+    stop_kube_port_forward "$PROMETHEUS_FORWARD_PID"
     PROMETHEUS_FORWARD_PID=
   fi
   if [[ -n "${PORT_FORWARD_PID:-}" ]]; then
-    kill "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
-    wait "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
+    stop_kube_port_forward "$PORT_FORWARD_PID"
     PORT_FORWARD_PID=
   fi
 }
@@ -463,9 +463,8 @@ start_port_forward() {
   local attempt
   stop_port_forward
   service=$(app_service)
-  kube port-forward -n "$NAMESPACE" service/"$service" "${LOCAL_PORT}:80" \
-    >"$PORT_FORWARD_LOG" 2>&1 &
-  PORT_FORWARD_PID=$!
+  start_kube_port_forward PORT_FORWARD_PID "$PORT_FORWARD_LOG" \
+    -n "$NAMESPACE" service/"$service" "${LOCAL_PORT}:80"
   for attempt in $(seq 1 120); do
     if curl --silent --output /dev/null --header 'Host: paperless.local' \
       "http://127.0.0.1:${LOCAL_PORT}/"; then

@@ -137,6 +137,7 @@ jobs:
           python3 .github/scripts/test-update-paperless-metadata.py
           python3 .github/scripts/test-release-gate.py
           python3 scripts/test-check-celery-idle.py
+          python3 scripts/test-e2e-port-forward.py
 
       - name: Check repository metadata and stable icon
         run: |
