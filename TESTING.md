@@ -26,7 +26,12 @@ scripts/verify-chart-dependencies.sh
 helm lint --strict .
 helm unittest --strict .
 scripts/verify-internal-service-names.sh
+python3 scripts/test-e2e-port-forward.py
 ```
+
+The port-forward regression test uses local TCP listeners and real child
+processes. It checks repeated reuse of the Paperless and Prometheus ports across
+all three baselines, cleanup on failure, and rejection of an occupied port.
 
 CI builds the package twice and canonicalizes both archives with
 `scripts/normalize-chart-package.py`; their bytes must compare equal before the

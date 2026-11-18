@@ -73,11 +73,8 @@ verify_prometheus_integration() {
     sleep 5
   done
   kube rollout status statefulset/prometheus-paperless-metrics -n "$NAMESPACE" --timeout=5m
-  kube port-forward -n "$NAMESPACE" service/paperless-metrics "${port}:9090" \
-    >"$WORK_DIR/prometheus-forward.log" 2>&1 &
-  # Read by the caller cleanup trap after sourcing this helper.
-  # shellcheck disable=SC2034
-  PROMETHEUS_FORWARD_PID=$!
+  start_kube_port_forward PROMETHEUS_FORWARD_PID "$WORK_DIR/prometheus-forward.log" \
+    -n "$NAMESPACE" service/paperless-metrics "${port}:9090"
   for attempt in $(seq 1 120); do
     targets=$(curl -fsS --max-time 10 "http://127.0.0.1:${port}/api/v1/targets?state=active" 2>/dev/null) || targets='{}'
     rules=$(curl -fsS --max-time 10 "http://127.0.0.1:${port}/api/v1/rules?type=alert" 2>/dev/null) || rules='{}'
