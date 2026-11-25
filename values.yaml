@@ -101,7 +101,8 @@ config:
   # a scalar env value changes, or referenced Secret contents change. Never put
   # a credential or credential hash here.
   secretRevision: 0
-  # -- Public Paperless URL. Empty derives the URL from the first ingress host.
+  # -- Public Paperless URL. Empty derives the URL from the first ingress host,
+  # or from the first httpRoute hostname when only httpRoute is enabled.
   url: ""
   # -- Additional Django applications.
   apps: ""
@@ -205,6 +206,32 @@ ingress:
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
+
+# Gateway API HTTPRoute, see https://gateway-api.sigs.k8s.io/api-types/httproute/
+# Requires the Gateway API CRDs and an existing Gateway.
+httpRoute:
+  # -- Render an HTTPRoute for the Paperless Service.
+  enabled: false
+  # -- HTTPRoute annotations.
+  annotations: {}
+  # -- Additional HTTPRoute labels.
+  labels: {}
+  # -- Gateways the route attaches to.
+  parentRefs:
+    - name: gateway
+      sectionName: http
+      # namespace: default
+  # -- Hostnames matched by the route. When config.url is empty and ingress is
+  # disabled, the first hostname derives PAPERLESS_URL as https:// plus that hostname.
+  hostnames:
+    - chart-example.local
+  # -- Route rules. Each rule forwards to the Paperless Service; matches,
+  # filters and timeouts are passed through unchanged.
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
 
 # -- Container resources. HPA utilization metrics require requests.cpu for CPU
 # (including Kubernetes' default CPU metric) and requests.memory for memory.

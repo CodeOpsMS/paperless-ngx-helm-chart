@@ -370,7 +370,7 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | config.secretKey.existingSecret.key | string | `"PAPERLESS_SECRET_KEY"` | Key in the existing Secret. |
 | config.secretKey.existingSecret.name | string | `""` | Existing Secret containing PAPERLESS_SECRET_KEY. Empty uses a generated, upgrade-stable key. |
 | config.secretRevision | int | `0` | Non-sensitive rollout revision for Secret-backed Paperless settings. Increment this when another config value changes the chart-managed Secret, a scalar env value changes, or referenced Secret contents change. Never put a credential or credential hash here. |
-| config.url | string | `""` | Public Paperless URL. Empty derives the URL from the first ingress host. |
+| config.url | string | `""` | Public Paperless URL. Empty derives the URL from the first ingress host, or from the first httpRoute hostname when only httpRoute is enabled. |
 | deploymentLabels | object | `{}` | This is for setting Kubernetes Labels to a Deployment. For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ |
 | env.PAPERLESS_ENABLE_FLOWER | bool | `true` | start service for monitor background jobs e.g. for prometheus (example value for env) Use a YAML boolean. False disables the process and metrics ports together. |
 | env.PAPERLESS_USE_X_FORWARD_HOST | bool | `true` | correct ip-address by X-Forwarded-For (example value for env) |
@@ -386,6 +386,12 @@ Paperless-ngx itself is a separate GPL-3.0 project.
 | grafana.dashboards.annotations | object | `{}` |  |
 | grafana.dashboards.enabled | bool | `false` |  |
 | grafana.dashboards.labels.grafana_dashboard | string | `"1"` |  |
+| httpRoute.annotations | object | `{}` | HTTPRoute annotations. |
+| httpRoute.enabled | bool | `false` | Render an HTTPRoute for the Paperless Service. |
+| httpRoute.hostnames | list | `["chart-example.local"]` | Hostnames matched by the route. When config.url is empty and ingress is disabled, the first hostname derives PAPERLESS_URL as https:// plus that hostname. |
+| httpRoute.labels | object | `{}` | Additional HTTPRoute labels. |
+| httpRoute.parentRefs | list | `[{"name":"gateway","sectionName":"http"}]` | Gateways the route attaches to. |
+| httpRoute.rules | list | `[{"matches":[{"path":{"type":"PathPrefix","value":"/"}}]}]` | Route rules. Each rule forwards to the Paperless Service; matches, filters and timeouts are passed through unchanged. |
 | image.digest | string | `"sha256:9bc6e8248891bcfa6f52fffe8b81e4ea8cae75790c3ec1b9906961a7ba55c969"` | Immutable multi-platform image digest. When set, it overrides the tag. |
 | image.pullPolicy | string | `"IfNotPresent"` | This sets the pull policy for images. (could be overwritten by global.image.pullPolicy) |
 | image.registry | string | `"ghcr.io"` | image registry (could be overwritten by global.image.registry) |

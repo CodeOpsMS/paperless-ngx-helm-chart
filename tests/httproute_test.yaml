@@ -1,0 +1,91 @@
+suite: Gateway API HTTPRoute
+templates:
+  - templates/httproute.yaml
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: routes the default prefix to the Paperless Service
+    release:
+      name: paperless
+    set:
+      httpRoute.enabled: true
+    asserts:
+      - isKind:
+          of: HTTPRoute
+      - isAPIVersion:
+          of: gateway.networking.k8s.io/v1
+      - equal:
+          path: spec.parentRefs
+          value:
+            - name: gateway
+              sectionName: http
+      - equal:
+          path: spec.hostnames
+          value:
+            - chart-example.local
+      - equal:
+          path: spec.rules
+          value:
+            - backendRefs:
+                - name: paperless-paperless-ngx
+                  port: 80
+              matches:
+                - path:
+                    type: PathPrefix
+                    value: /
+
+  - it: passes through filters, timeouts, labels and annotations
+    set:
+      service.port: 8000
+      httpRoute:
+        enabled: true
+        annotations:
+          example.com/owner: docs
+        labels:
+          team: docs
+        parentRefs:
+          - name: shared
+            namespace: gateways
+            sectionName: https
+        hostnames:
+          - paperless.example.com
+        rules:
+          - filters:
+              - type: RequestHeaderModifier
+                requestHeaderModifier:
+                  set:
+                    - name: X-Forwarded-Proto
+                      value: https
+            timeouts:
+              request: 300s
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/owner"]
+          value: docs
+      - equal:
+          path: metadata.labels.team
+          value: docs
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: gateways
+      - notExists:
+          path: spec.rules[0].matches
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8000
+      - equal:
+          path: spec.rules[0].filters[0].type
+          value: RequestHeaderModifier
+      - equal:
+          path: spec.rules[0].timeouts.request
+          value: 300s
+
+  - it: rejects a route without parentRefs
+    set:
+      httpRoute.enabled: true
+      httpRoute.parentRefs: []
+    asserts:
+      - failedTemplate: {}
